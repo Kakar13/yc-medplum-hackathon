@@ -50,9 +50,11 @@ cd ../web && npm install && npm run dev
 python -m src.cli doctor
 python -m src.cli once "My eczema on my elbows is flaring and I can't sleep"
 
-# Eczema fixtures → Moss docs
+# Eczema fixtures → Moss long-term index (usemoss/moss: upsert + load_index)
 python -m src.synthea_import --bundle data/synthea/sample_eczema_bundle.json
 python -m src.seed_moss
+# Live calls also use Moss sessions per encounter — see src/moss_retriever.py
+# https://github.com/usemoss/moss
 
 # E2E smoke (API must be up)
 python scripts/smoke_flarecheck.py

@@ -1,4 +1,8 @@
-"""Seed Moss index from data/sample_history.json (or dry-run in mock)."""
+"""Seed Moss long-term index from data/sample_history.json.
+
+Follows https://github.com/usemoss/moss best practices:
+  create_index / add_docs(upsert=True) → load_index → query with hybrid alpha.
+"""
 
 from __future__ import annotations
 
@@ -18,20 +22,33 @@ async def main() -> None:
     settings = get_settings()
     docs = json.loads(Path(SAMPLE_PATH).read_text())
     console.print(f"Loaded {len(docs)} docs from {SAMPLE_PATH}")
-    console.print(f"mode={settings.agent_mode} index={settings.moss_index_name}")
+    console.print(f"index={settings.moss_index_name} keys={bool(settings.moss_project_id)}")
 
     moss = MossService(settings)
-    if settings.use_mock or not settings.moss_project_id:
-        console.print("[yellow]Mock / missing Moss keys — listing docs only[/yellow]")
+    if not moss.live:
+        console.print("[yellow]No Moss keys — listing docs only (mock)[/yellow]")
         for d in docs:
             console.print(f"  • {d['id']}: {d['text'][:80]}...")
         return
 
-    await moss.ensure_index()
-    # Verify
-    sample = await moss.search_text("asthma inhaler", top_k=2)
-    console.print("[green]Moss index ready. Sample query:[/green]")
-    console.print(sample)
+    info = await moss.ensure_index()
+    console.print(f"[green]Index ready:[/green] {info}")
+
+    for query in (
+        "eczema flare itch topical steroid",
+        "asthma inhaler wheeze",
+        "insurance coverage telehealth",
+    ):
+        # Protocol-only filter demo
+        hits = await moss.search_text(query, top_k=2)
+        console.print(f"\n[bold]query:[/bold] {query}")
+        console.print(hits[:500])
+
+    proto = await moss.search_text(
+        "when to escalate rash", top_k=2, metadata_type="Protocol"
+    )
+    console.print("\n[bold]metadata filter type=Protocol[/bold]")
+    console.print(proto[:500])
 
 
 if __name__ == "__main__":

@@ -23,8 +23,8 @@ Primary demo vertical: eczema / rash flares. Architecture also supports wearable
 Goals:
 1) Call ensure_patient at the start of a new session.
 2) For rash, eczema, itch, skin flare, or "looks worse" — call send_photo_capture_link early and read the URL aloud / in reply (expires 15 minutes, single-use).
-3) Ground questions with moss_search (history, meds, allergies, eczema protocol).
-4) Chart meaningful turns with chart_to_medplum.
+3) Ground with moss_search every clinical turn (Moss long-term index + live encounter session; optional metadata_type=Protocol|Condition|…).
+4) Chart meaningful turns with chart_to_medplum (also indexes the turn into the Moss session).
 5) Optional: get_wearable_risk if a wearable context may help (sleep/recovery) — never claim diagnosis from wearables.
 6) When cost/coverage comes up, call check_eligibility for urgent tele-dermatology.
 7) If anxious / asks for a person / high stakes → request_human_handoff.

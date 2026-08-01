@@ -46,10 +46,22 @@ async def moss_search(
     query: Annotated[
         str, "Clinical question or symptom to ground in patient history / protocols"
     ],
+    metadata_type: Annotated[
+        str,
+        "Optional Moss metadata filter type: Condition, MedicationRequest, Protocol, AllergyIntolerance, Coverage, Observation — empty for all",
+    ] = "",
 ) -> str:
-    """Search patient history, meds, allergies, and triage protocols via Moss."""
+    """Moss hybrid search (long-term index + live encounter session). Sub-10ms when loaded.
+
+    Best practices: https://github.com/usemoss/moss — load_index once, session per encounter.
+    """
     assert _moss is not None
-    return await _moss.search_text(query)
+    session_id = _session.get("encounter_id")
+    return await _moss.search_text(
+        query,
+        session_id=session_id,
+        metadata_type=metadata_type or None,
+    )
 
 
 @tool
@@ -62,7 +74,7 @@ def ensure_patient() -> str:
 
 
 @tool
-def chart_to_medplum(
+async def chart_to_medplum(
     user_text: Annotated[str, "What the patient said"],
     agent_summary: Annotated[str, "Short clinical summary of this turn"],
 ) -> str:
@@ -78,6 +90,23 @@ def chart_to_medplum(
         agent_text=agent_summary,
     )
     _session["encounter_id"] = result["encounter_id"]
+    # Live-call short-term Moss session (usemoss/moss best practice)
+    if _moss is not None:
+        from uuid import uuid4
+
+        enc = result["encounter_id"]
+        try:
+            await _moss.add_turn(
+                enc, turn_id=f"user-{uuid4().hex[:8]}", text=user_text, role="patient"
+            )
+            await _moss.add_turn(
+                enc,
+                turn_id=f"agent-{uuid4().hex[:8]}",
+                text=agent_summary,
+                role="agent",
+            )
+        except Exception:
+            pass
     return (
         f"Charted to Medplum ({result['mode']}): "
         f"Encounter/{result['encounter_id']} Composition/{result.get('composition_id')}"
@@ -142,10 +171,16 @@ def send_photo_capture_link(
 
 
 @tool
-def request_human_handoff(
+async def request_human_handoff(
     reason: Annotated[str, "Why the patient or agent wants a human"],
 ) -> str:
     """Escalate to a human clinician for co-regulation / algorithm-aversion handoff."""
+    # Persist Moss session so the human can resume short-term context
+    if _moss is not None and _session.get("encounter_id"):
+        try:
+            await _moss.push_session(_session["encounter_id"])
+        except Exception:
+            pass
     return (
         "HUMAN_HANDOFF_REQUESTED\n"
         f"reason={reason}\n"

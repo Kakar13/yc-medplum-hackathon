@@ -4,126 +4,69 @@ description: >-
   Integrate Moss real-time semantic search (sub-10ms) for voice agents and
   copilots. Use when grounding agents with local/cloud indexes, live-call
   context, sessions, hybrid search, LiveKit/Pipecat/LangChain retrieval, or
-  when the user mentions Moss, moss.dev, or real-time semantic search.
+  when the user mentions Moss, moss.dev, usemoss/moss, or real-time semantic search.
 ---
 
 # Moss (moss.dev)
 
-Docs: [docs.moss.dev](https://docs.moss.dev/docs) · Index: [llms.txt](https://docs.moss.dev/llms.txt)
+- GitHub (source of truth for SDK samples): [usemoss/moss](https://github.com/usemoss/moss)
+- Docs: [docs.moss.dev](https://docs.moss.dev/docs) · [llms.txt](https://docs.moss.dev/llms.txt)
 
-Moss is the runtime for **real-time semantic search** in conversational apps. Sub-10 ms lookups, instant index updates, no extra infra. Runs in browser, on-device, or cloud — same API. Index lives next to the agent: retrieval is a function call, not a remote round trip.
+Moss is a **search runtime** (not a remote vector DB): load an index into your process, query in **<10 ms**. Hybrid semantic + keyword, built-in embeddings (`moss-minilm` / `moss-mediumlm`), metadata filters, sessions for live calls.
 
-## Agent instructions
+## Agent instructions (best practices)
 
-1. Use Moss for **history-aware / knowledge-grounded** agent turns (patient FAQ, clinical protocols, prior visit notes chunks — non-PHI fixtures for the hack when possible).
-2. Prefer **live-call pattern**: load long-term index once + session for short-term transcript/context; query both each turn.
-3. Default model `moss-minilm`; use `moss-mediumlm` when accuracy matters more than speed.
-4. Hybrid search via `alpha`: `0.0` keyword, `1.0` semantic, blend in between.
-5. Do not invent a custom vector DB — Moss is the sponsored retrieval layer for this hackathon.
+1. **Live-call pattern** — every FlareCheck / voice turn:
+   - Long-term: `load_index("patient-history")` once (conditions, meds, protocols)
+   - Short-term: `client.session(f"flare-{encounter_id}")` — `add_docs` each transcript turn
+   - Query **both** each turn; `session.push_index()` at handoff / end
+   - Ref: [Live-Call Context](https://docs.moss.dev/docs/build/live-call-context) · repo examples under `examples/python/`
+2. Prefer **`DocumentInfo(id, text, metadata)`** with string metadata values; upsert via `MutationOptions(upsert=True)`.
+3. Default model **`moss-minilm`**; use `moss-mediumlm` only if accuracy > latency.
+4. Hybrid **`QueryOptions(top_k=…, alpha=0.6)`** — `0.0` keyword, `1.0` semantic.
+5. Metadata filters: `QueryOptions(filter={"field": "type", "condition": {"$eq": "Protocol"}})`.
+6. Log / surface `results.time_taken_ms` when debugging latency.
+7. Do **not** add Pinecone/Chroma for this hack — Moss is the retrieval layer.
+8. This repo: [`agent/src/moss_retriever.py`](../../agent/src/moss_retriever.py), seed with `python -m src.seed_moss`.
 
 ## Portal setup
 
-1. Sign up at Moss, confirm email, sign in
-2. **Create Index** → copy **Project ID** and **Project Key**
-3. Discord onboarding: [Moss Discord](https://discord.gg/eMXExuafBR)
+1. Sign up at [moss.dev](https://moss.dev), create project
+2. Copy **Project ID** + **Project Key** → `MOSS_PROJECT_ID` / `MOSS_PROJECT_KEY`
+3. Discord: [Moss Discord](https://moss.link/discord)
 
 ```bash
-export MOSS_PROJECT_ID="your_project_id"
-export MOSS_PROJECT_KEY="your_project_key"
+pip install moss   # Python 3.10+
+# or: npm install @moss-dev/moss
 ```
 
-## Install
-
-```bash
-# JavaScript (Node 18+)
-npm install @moss-dev/moss
-
-# Python (3.10+)
-pip install moss
-```
-
-Samples: [github.com/usemoss/moss](https://github.com/usemoss/moss) (`javascript/*_sample.ts`, `python/*_sample.py`).
-
-## Quickstart (JS)
-
-```ts
-import { MossClient, DocumentInfo } from '@moss-dev/moss'
-
-const client = new MossClient(process.env.MOSS_PROJECT_ID!, process.env.MOSS_PROJECT_KEY!)
-const documents: DocumentInfo[] = [
-  { id: 'doc1', text: 'How do I track my order? ...', metadata: { category: 'shipping' } },
-  { id: 'doc2', text: 'What is your return policy? ...', metadata: { category: 'returns' } },
-]
-const indexName = 'faqs'
-await client.createIndex(indexName, documents, { modelId: 'moss-minilm' })
-await client.loadIndex(indexName)
-const results = await client.query(indexName, 'How do I return a damaged product?', { topK: 3 })
-console.log(results.docs[0])
-```
-
-## Quickstart (Python)
+## Canonical Python flow (from usemoss/moss README)
 
 ```python
-import os, asyncio
-from moss import MossClient, DocumentInfo, QueryOptions
+from moss import MossClient, DocumentInfo, QueryOptions, MutationOptions
 
-client = MossClient(os.getenv("MOSS_PROJECT_ID"), os.getenv("MOSS_PROJECT_KEY"))
-
-async def main():
-    await client.create_index("faqs", [
-        DocumentInfo(id="doc1", text="How do I track my order? ...", metadata={"category": "shipping"}),
-        DocumentInfo(id="doc2", text="What is your return policy? ...", metadata={"category": "returns"}),
-    ], "moss-minilm")
-    await client.load_index("faqs")
-    results = await client.query("faqs", "How do I return a damaged product?", QueryOptions(top_k=3, alpha=0.6))
-    print(results.docs[0].id, results.docs[0].text, results.docs[0].score)
-
-asyncio.run(main())
+client = MossClient(project_id, project_key)
+await client.create_index("patient-history", docs, "moss-minilm", wait=True)
+# later updates:
+await client.add_docs("patient-history", docs, MutationOptions(upsert=True))
+await client.load_index("patient-history")
+results = await client.query(
+    "patient-history",
+    "eczema flare itch",
+    QueryOptions(top_k=3, alpha=0.6),
+)
+print(results.time_taken_ms, results.docs[0].text)
 ```
 
-## How it works
-
-| Concept | Role |
-|---------|------|
-| **Index** | Packaged searchable knowledge |
-| **Embeddings** | On-device (`moss-minilm` / `moss-mediumlm`) or bring-your-own |
-| **Sessions** | Local real-time index during a live interaction; sync later |
-| **Retrieval** | In-memory semantic / keyword / hybrid |
-| **Storage** | Local persist + optional cloud sync |
-
-## Live-call context (preferred for voice)
-
-During a call, query two indexes:
-
-| | Short-term | Long-term |
-|--|------------|-----------|
-| **What** | Live transcript / working notes | FAQs, policies, profile, history |
-| **Where** | `client.session(call_id)` | `load_index("...")` once |
-| **Lifetime** | This interaction (+ optional `push_index`) | Across interactions |
+## Live session (short-term)
 
 ```python
-await client.load_index("support-faqs")
-session = await client.session(index_name=call_id)
-await session.add_docs([DocumentInfo(id="turn-1", text="...")])
-knowledge = await client.query("support-faqs", query, QueryOptions(top_k=3))
-recent = await session.query(query, QueryOptions(top_k=3))
-# pass both result sets into the LLM / voice agent turn
+session = await client.session(index_name=f"flare-{encounter_id}")
+await session.add_docs([DocumentInfo(id="turn-1", text="...", metadata={"role": "patient"})])
+recent = await session.query(query, QueryOptions(top_k=3, alpha=0.6))
 await session.push_index()
 ```
 
-Docs: [Live-Call Context](https://docs.moss.dev/docs/build/live-call-context) · [Sessions](https://docs.moss.dev/docs/integrate/sessions)
+## Hackathon wiring (FlareCheck)
 
-## Capabilities & integrations
-
-- [Real-Time Local Indexing](https://docs.moss.dev/docs/build/real-time-local-indexing)
-- [Data Hydration & Sync](https://docs.moss.dev/docs/build/data-hydration-sync)
-- [Cross-Agent Handoff](https://docs.moss.dev/docs/build/cross-agent-handoff)
-- Voice: [LiveKit](https://docs.moss.dev/docs/integrations/livekit), [Pipecat](https://docs.moss.dev/docs/integrations/pipecat), [VAPI](https://docs.moss.dev/docs/integrations/vapi)
-- Agents: [LangChain](https://docs.moss.dev/docs/integrations/langchain), [Vercel AI SDK](https://docs.moss.dev/docs/integrations/vercel-ai-sdk), [MCP Server](https://docs.moss.dev/docs/integrations/mcp-server)
-- [Hybrid Search](https://docs.moss.dev/docs/integrate/hybrid-search) · [Metadata Filtering](https://docs.moss.dev/docs/integrate/metadata-filtering) · [Multi-Index Search](https://docs.moss.dev/docs/integrate/multi-index-search)
-
-SDKs: JavaScript (Node), Python, Swift, Elixir, C, browser/WASM.
-
-## Hackathon pattern
-
-**History-aware voice intake:** Deepgram (or LiveKit) for speech → each turn Moss queries (long-term patient/education index + session transcript) → LLM reply → chart to Medplum FHIR. Keep retrieval in-process so voice latency stays under control.
+Deepgram (or text) → each turn `moss_search` (long-term + session) → LangGraph → Medplum chart → `add_turn` into session. Keep retrieval in-process so voice stays snappy.
