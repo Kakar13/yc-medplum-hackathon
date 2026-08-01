@@ -137,3 +137,44 @@ async def smoke_deepgram_key() -> str:
         if r.status_code < 300:
             return f"Deepgram OK ({r.status_code})"
         return f"Deepgram key check failed: {r.status_code} {r.text[:200]}"
+
+
+async def transcribe_audio(content: bytes, content_type: str = "audio/webm") -> dict[str, Any]:
+    """Nova-3 pre-recorded listen — browser mic → text for /turn.
+
+    Docs: https://developers.deepgram.com/docs/pre-recorded-audio
+    """
+    settings = get_settings()
+    if not settings.deepgram_api_key:
+        raise RuntimeError("DEEPGRAM_API_KEY not set")
+
+    import httpx
+
+    params = {
+        "model": "nova-3",
+        "smart_format": "true",
+        "punctuate": "true",
+        "language": "en",
+    }
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        r = await client.post(
+            "https://api.deepgram.com/v1/listen",
+            params=params,
+            headers={
+                "Authorization": f"Token {settings.deepgram_api_key}",
+                "Content-Type": content_type or "application/octet-stream",
+            },
+            content=content,
+        )
+        if r.status_code >= 400:
+            raise RuntimeError(f"Deepgram listen failed: {r.status_code} {r.text[:300]}")
+        data = r.json()
+    alt = (
+        (((data.get("results") or {}).get("channels") or [{}])[0].get("alternatives") or [{}])[0]
+    )
+    transcript = (alt.get("transcript") or "").strip()
+    return {
+        "transcript": transcript,
+        "confidence": alt.get("confidence"),
+        "model": "nova-3",
+    }

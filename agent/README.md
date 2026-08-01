@@ -77,5 +77,15 @@ python scripts/smoke_flarecheck.py
 - [x] Synthea eczema bundle + importer
 - [x] Secure capture tokens + Medplum Binary/DocumentReference path
 - [x] FastAPI BFF + web capture/chart UI
+- [x] Browser mic → Deepgram Nova-3 → `/voice/turn` → LangGraph (key server-side)
 - [ ] Live Medplum ClientApplication credentials (fill `.env`)
-- [ ] Deepgram Voice Agent mic in web shell
+- [ ] Full Deepgram Voice Agent WebSocket (duplex TTS) — mic STT path works now
+
+### Loop (build → smoke)
+
+```bash
+# One tick
+bash scripts/loop_tick.sh
+
+# Agent keeps a fixed 10m loop armed in Cursor that runs smoke then wakes to ship the next gap.
+```

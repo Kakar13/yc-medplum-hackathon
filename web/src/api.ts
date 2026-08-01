@@ -86,6 +86,20 @@ export const api = {
     }>;
   },
   chart: (encounterId: string) => json<ChartPayload>(`/chart/${encounterId}`),
+  voiceTurn: async (blob: Blob, threadId?: string) => {
+    const form = new FormData();
+    form.append('file', blob, 'mic.webm');
+    if (threadId) form.append('thread_id', threadId);
+    const res = await fetch(`${API}/voice/turn`, { method: 'POST', body: form });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json() as Promise<{
+      transcript: string;
+      confidence?: number;
+      reply: string;
+      handoff: boolean;
+      session: Record<string, unknown>;
+    }>;
+  },
 };
 
 export { API };

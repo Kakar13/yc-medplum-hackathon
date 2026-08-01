@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -329,6 +329,62 @@ async def chart(encounter_id: str):
 @app.get("/session")
 async def session():
     return get_session()
+
+
+@app.post("/voice/transcribe")
+async def voice_transcribe(file: UploadFile = File(...)):
+    """Browser mic blob → Deepgram Nova-3 transcript (API key stays server-side)."""
+    from .voice_deepgram import transcribe_audio
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "Empty audio")
+    if len(content) > 15 * 1024 * 1024:
+        raise HTTPException(413, "Audio too large")
+    try:
+        return await transcribe_audio(content, file.content_type or "audio/webm")
+    except Exception as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.post("/voice/turn")
+async def voice_turn(
+    file: UploadFile = File(...),
+    thread_id: str | None = Form(default=None),
+    wearable_context: str | None = Form(default=None),
+):
+    """Mic audio → Deepgram STT → LangGraph /turn in one call."""
+    from .voice_deepgram import transcribe_audio
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "Empty audio")
+    try:
+        stt = await transcribe_audio(content, file.content_type or "audio/webm")
+    except Exception as exc:
+        raise HTTPException(502, str(exc)) from exc
+    transcript = stt.get("transcript") or ""
+    if not transcript:
+        return {
+            "transcript": "",
+            "reply": "I didn't catch that — try again a bit closer to the mic.",
+            "handoff": False,
+            "session": get_session(),
+        }
+    agent = _get_agent()
+    out = await run_turn(
+        agent,
+        thread_id or str(uuid.uuid4()),
+        transcript,
+        wearable_context=wearable_context,
+    )
+    return {
+        "transcript": transcript,
+        "confidence": stt.get("confidence"),
+        "reply": out.get("reply"),
+        "handoff": out.get("handoff"),
+        "session": out.get("session") or {},
+    }
 
 
 @app.post("/deepgram/function")
