@@ -46,6 +46,7 @@ export type ChartPayload = {
   proposals?: Proposal[];
   research?: Citation[];
   capability?: Capability | null;
+  periochart?: Periochart | null;
 };
 
 export type Citation = {
@@ -75,6 +76,41 @@ export type Proposal = {
   task_status?: string;
   reviewer?: string;
   awaiting_review?: boolean;
+};
+
+export type PerioTooth = {
+  number: number;
+  name: string;
+  quadrant_name: string;
+  label: string;
+  depths_mm: number[];
+  max_depth_mm: number;
+  bleeding_on_probing: boolean;
+  severity: 'healthy' | 'early' | 'advanced';
+  restoration: string;
+  note: string;
+  status: string;
+  history: { date: string; event: string; detail: string; provider: string }[];
+  focus: boolean;
+};
+
+export type Periochart = {
+  system: string;
+  months_since_prophylaxis: number;
+  hygiene_due: boolean;
+  alert: {
+    tooth: number;
+    label: string;
+    status: string;
+    headline: string;
+    known_history: string;
+    prior_events: number;
+  } | null;
+  teeth: PerioTooth[];
+  summary: {
+    advanced_sites: number[];
+    pending_treatment: { tooth: number; plan: string; urgency: string }[];
+  };
 };
 
 export type IdentityState = {

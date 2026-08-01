@@ -454,9 +454,12 @@ async def chart(encounter_id: str):
     """Clinician BFF — Encounter + notes + photos + proposals (server credentials)."""
     medplum = _medplum()
     data = medplum.get_encounter_chart(encounter_id)
-    data["eligibility"] = await StediService().check_text("specialist office visit")
+    data["eligibility"] = get_session().get("eligibility") or await StediService().check_text(
+        "specialist office visit"
+    )
     data["proposals"] = medplum.list_proposals(encounter_id=encounter_id)
     data["research"] = (get_session().get("last_research") or {}).get("citations") or []
+    data["periochart"] = get_session().get("periochart")
     data["capability"] = (
         get_gateway().active.public() if get_gateway().active else None
     )

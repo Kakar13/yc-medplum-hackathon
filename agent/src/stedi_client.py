@@ -22,6 +22,17 @@ TEST_PAYER_ID = "60054"
 TEST_SUBSCRIBER = {"firstName": "John", "lastName": "Doe", "memberId": "AETNA9wcSu"}
 TEST_DEPENDENT = {"firstName": "Jordan", "lastName": "Doe", "dateOfBirth": "20010714"}
 
+# Dental runs on a separate payer and service type code (35, not 30) with its own fixture — a
+# medical eligibility check tells a patient nothing about what a crown will cost them. Cigna
+# dental fixture from the same Stedi mock-request docs.
+DENTAL_PAYER_ID = "62308"
+DENTAL_SUBSCRIBER = {
+    "firstName": "Jaguar",
+    "lastName": "Dent",
+    "dateOfBirth": "19960505",
+    "memberId": "U3141592653",
+}
+
 # Fixture shaped like a simplified benefits summary (not full 271)
 MOCK_BENEFITS = {
     "payer": "UnitedHealthcare (mock)",
@@ -54,20 +65,30 @@ class StediService:
         # or birth date returns an AAA error rather than benefits. This is the Aetna
         # subscriber+dependent fixture from Stedi's own docs:
         # https://www.stedi.com/docs/healthcare/api-reference/mock-requests-eligibility-checks
-        payload = {
-            "tradingPartnerServiceId": TEST_PAYER_ID,
-            "provider": {
-                "organizationName": "Provider Name",
-                "npi": "1999999984",
-            },
-            "subscriber": {
-                "memberId": member_id,
-                "firstName": first_name,
-                "lastName": last_name,
-            },
-            "dependents": [dict(TEST_DEPENDENT)],
-            "encounter": {"serviceTypeCodes": [service_type]},
-        }
+        if service_type == "35":
+            # Dental is a different payer, a different member, and no dependent — reusing the
+            # medical fixture here just returns an AAA error.
+            payload = {
+                "tradingPartnerServiceId": DENTAL_PAYER_ID,
+                "provider": {"organizationName": "One", "npi": "1999999984"},
+                "subscriber": dict(DENTAL_SUBSCRIBER),
+                "encounter": {"serviceTypeCodes": ["35"]},
+            }
+        else:
+            payload = {
+                "tradingPartnerServiceId": TEST_PAYER_ID,
+                "provider": {
+                    "organizationName": "Provider Name",
+                    "npi": "1999999984",
+                },
+                "subscriber": {
+                    "memberId": member_id,
+                    "firstName": first_name,
+                    "lastName": last_name,
+                },
+                "dependents": [dict(TEST_DEPENDENT)],
+                "encounter": {"serviceTypeCodes": [service_type]},
+            }
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.post(
                 STEDI_ELIGIBILITY_URL,
@@ -86,7 +107,14 @@ class StediService:
             }
 
     async def check_text(self, service_hint: str = "urgent telehealth") -> str:
-        result = await self.check_eligibility()
+        # Route dental work to the dental benefit. A medical check would come back "active
+        # coverage" and tell the patient nothing about what a crown costs them.
+        dental_words = (
+            "dental", "dentist", "tooth", "teeth", "crown", "root canal", "filling",
+            "composite", "extraction", "hygien", "cleaning", "perio", "molar",
+        )
+        service_type = "35" if any(w in service_hint.lower() for w in dental_words) else "30"
+        result = await self.check_eligibility(service_type=service_type)
         if result.get("mode") == "mock":
             return (
                 f"Eligibility ({result['mode']}): {result['payer']} — "

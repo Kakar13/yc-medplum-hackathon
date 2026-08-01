@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type ChartPayload } from '../api';
+import { PerioChart } from '../components/PerioChart';
 import { VitalsViz } from '../components/VitalsViz';
 import {
   VoiceClient,
@@ -326,6 +327,13 @@ export function Console() {
               <span className="pane-tag">awaiting</span>
             )}
           </div>
+
+          {chart?.periochart && (
+            <div className="clin-block">
+              <h3>Periodontal chart</h3>
+              <PerioChart chart={chart.periochart} />
+            </div>
+          )}
 
           <div className="clin-block">
             <h3>Note, written live</h3>

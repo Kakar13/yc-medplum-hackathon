@@ -22,6 +22,7 @@ from .medplum_client import MedplumService
 logger = logging.getLogger(__name__)
 from .moss_retriever import MossService
 from .open_wearables import OpenWearablesService
+from . import perio
 from .research import ResearchService
 from .stedi_client import StediService
 
@@ -236,6 +237,64 @@ def _dob_matches(spoken: str, expected_iso: str) -> bool:
 
 
 @tool
+@guarded
+def locate_tooth(
+    description: Annotated[
+        str, "How the patient described the tooth, verbatim, e.g. 'back one on the bottom right'"
+    ],
+) -> str:
+    """Turn a patient's description of a tooth into a specific tooth number.
+
+    Patients cannot name teeth and should not be asked to. Ask about arch and side, which they
+    always know, and let this narrow it down.
+    """
+    # A patient narrows a tooth down over several turns — "one of my back teeth", then "bottom
+    # right", then "the last one but one". Each answer is a fragment, so localize against
+    # everything they have said, not just the most recent clause.
+    said = _session.setdefault("tooth_words", [])
+    said.append(description)
+    result = perio.locate_tooth(" ".join(said))
+    if result["resolved"]:
+        _session["focus_tooth"] = result["tooth"]["number"]
+        said.clear()
+    else:
+        _session["focus_tooth"] = None
+    if result["resolved"]:
+        return (
+            f"TOOTH_RESOLVED {result['label']}. Confirm this back to the patient in plain "
+            "language — say the position, never the number — then carry on."
+        )
+    return (
+        f"TOOTH_AMBIGUOUS still {len(result['candidates'])} possibilities. "
+        f"Ask exactly this: \"{result['question']}\" Do not guess a tooth."
+    )
+
+
+@tool
+@guarded
+def get_periochart() -> str:
+    """The patient's periodontal chart and this tooth's treatment history.
+
+    Use when a dental complaint is localized. Grounds the conversation in what has already been
+    done to that tooth, so the patient is not asked to remember their own dental record.
+    """
+    focus = _session.get("focus_tooth")
+    chart = perio.periochart(focus)
+    _session["periochart"] = chart
+    spoken = perio.periochart_for_voice(focus)
+    history = ""
+    if focus:
+        tooth = next((t for t in chart["teeth"] if t["number"] == focus), None)
+        if tooth and tooth["history"]:
+            last = tooth["history"][-1]
+            history = (
+                f" On record for this tooth: {last['event']} on {last['date']}, "
+                f"{last['detail']}, by {last['provider']}."
+            )
+    return f"PERIOCHART {spoken}{history}"
+
+
+@tool
 def ensure_patient() -> str:
     """Confirm which patient this session is bound to, and the scope of that binding.
 
@@ -424,6 +483,14 @@ EMERGENCY_HINTS = (
     "anaphyla", "throat closing", "suicid", "self-harm", "bleeding won't stop",
     "severe bleeding", "unconscious", "passed out", "altered consciousness",
     "stiff neck", "worst headache", "coughing up blood",
+    # Odontogenic infection that has left the tooth. A lower molar abscess can track into the
+    # submandibular and sublingual spaces (Ludwig's angina) and close the airway within hours,
+    # and these patients present describing toothache, so a dental complaint is not automatically
+    # a routine one. Signs per StatPearls NBK482354 and NBK542165.
+    "floor of my mouth", "can't swallow", "cant swallow", "trouble swallowing",
+    "difficulty swallowing", "drooling", "can't open my mouth", "cant open my mouth",
+    "jaw won't open", "tongue is pushed up", "swelling under my jaw", "swollen neck",
+    "muffled voice", "voice sounds different",
 )
 
 # Needs to be seen today, but an ambulance is the wrong answer. Exertional breathlessness over
@@ -498,7 +565,11 @@ async def check_eligibility(
     plan that involves imaging, a specialist, or therapy.
     """
     assert _stedi is not None
-    return await _stedi.check_text(service_hint)
+    result = await _stedi.check_text(service_hint)
+    # Keep what was actually priced. The chart used to re-run a generic office-visit check, so a
+    # patient asking about a crown saw their medical benefit quoted back at them.
+    _session["eligibility"] = result
+    return result
 
 
 @tool
@@ -518,6 +589,8 @@ TOOLS = [
     moss_search,
     ensure_patient,
     verify_identity,
+    locate_tooth,
+    get_periochart,
     chart_to_medplum,
     deep_research,
     propose_care_plan,
