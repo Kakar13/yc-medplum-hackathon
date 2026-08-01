@@ -23,6 +23,10 @@ _MOCK_STORE: dict[str, list[dict[str, Any]]] = {
     "Binary": [],
     "Media": [],
     "DocumentReference": [],
+    "AuditEvent": [],
+    "CarePlan": [],
+    "Provenance": [],
+    "Task": [],
 }
 
 
@@ -67,6 +71,11 @@ class MedplumService:
         return "live" if self._client else "mock"
 
     def ensure_demo_patient(self) -> dict[str, Any]:
+        """Idempotent: the same demo patient for the life of the process.
+
+        A fresh Patient per call would silently split one visit across several charts and
+        make the capability's bound patient disagree with the session's.
+        """
         if self.settings.medplum_demo_patient_id and self._client:
             return self._client.read_resource("Patient", self.settings.medplum_demo_patient_id)
 
@@ -80,6 +89,9 @@ class MedplumService:
         if self._client:
             created = self._client.create_resource(patient)
             return created
+
+        if self._mock_store["Patient"]:
+            return self._mock_store["Patient"][0]
 
         patient["id"] = self.settings.medplum_demo_patient_id or f"mock-{uuid4().hex[:8]}"
         self._mock_store["Patient"].append(patient)
@@ -222,7 +234,7 @@ class MedplumService:
         sleep = snapshot.get("sleep") or {}
         merged = {**sleep, **recovery}
         provider = snapshot.get("provider") or "wearable"
-        device = f"{provider} (via FlareCheck)"
+        device = f"{provider} (via Preflight)"
 
         written: list[str] = []
         for key, code, display, unit, system in self.WEARABLE_VITALS:
@@ -288,12 +300,12 @@ class MedplumService:
         composition = {
             "resourceType": "Composition",
             "status": "preliminary",
-            "type": {"text": "FlareCheck intake note"},
+            "type": {"text": "Preflight pre-visit intake note"},
             "subject": {"reference": f"Patient/{patient_id}"},
             "encounter": {"reference": f"Encounter/{encounter_id}"},
             "date": datetime.now(timezone.utc).isoformat(),
             "title": title,
-            "author": [{"display": "FlareCheck Voice Agent"}],
+            "author": [{"display": "Preflight intake agent (AI)"}],
             "section": sections,
         }
         if self._client:
@@ -570,6 +582,326 @@ class MedplumService:
             "document_reference_id": docref["id"],
             "binary_id": binary_id,
             "mode": "mock",
+        }
+
+    def write_audit_event(self, entry: dict[str, Any]) -> dict[str, Any]:
+        """Persist a gateway decision as FHIR AuditEvent so crossings are reconstructable.
+
+        Records both the capability's bound patient and the patient the call referenced —
+        HAARF's audit schema logs only the session patient, so a boundary crossing is
+        invisible in its logs.
+        """
+        allowed = bool(entry.get("allowed"))
+        audit = {
+            "resourceType": "AuditEvent",
+            "type": {
+                "system": "http://terminology.hl7.org/CodeSystem/audit-event-type",
+                "code": "rest",
+                "display": "RESTful Operation",
+            },
+            "subtype": [
+                {
+                    "system": "https://preflight.health/CodeSystem/agent-action",
+                    "code": entry.get("tool") or "tool_call",
+                }
+            ],
+            "action": "E",
+            "recorded": datetime.now(timezone.utc).isoformat(),
+            "outcome": "0" if allowed else "4",
+            "outcomeDesc": entry.get("reason"),
+            "purposeOfEvent": [
+                {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/v3-ActReason",
+                            "code": entry.get("purpose_of_use") or "TREAT",
+                        }
+                    ]
+                }
+            ],
+            "agent": [
+                {
+                    "type": {"text": "AI agent"},
+                    "who": {"display": entry.get("actor") or "agent"},
+                    "requestor": False,
+                }
+            ],
+            "source": {"observer": {"display": "Preflight capability gateway"}},
+            "entity": [],
+        }
+        if entry.get("bound_patient"):
+            audit["entity"].append(
+                {
+                    "what": {"reference": f"Patient/{entry['bound_patient']}"},
+                    "type": {"text": "capability-bound patient"},
+                }
+            )
+        if entry.get("requested_patient"):
+            audit["entity"].append(
+                {
+                    "what": {"display": str(entry["requested_patient"])},
+                    "type": {"text": "referenced patient (denied)"},
+                }
+            )
+        if entry.get("control"):
+            audit["entity"].append(
+                {"type": {"text": "control"}, "what": {"display": str(entry["control"])}}
+            )
+
+        if self._client:
+            try:
+                return self._client.create_resource(audit)
+            except Exception:
+                return audit
+
+        audit["id"] = f"audit-{uuid4().hex[:8]}"
+        self._mock_store["AuditEvent"].append(audit)
+        return audit
+
+    def propose_care_plan(
+        self,
+        patient_id: str,
+        encounter_id: str,
+        *,
+        title: str,
+        summary: str,
+        activities: list[str],
+        citations: list[dict[str, Any]] | None = None,
+        reviewer_display: str = "On-call reviewing clinician",
+    ) -> dict[str, Any]:
+        """Agent-authored plan as a DRAFT CarePlan + Provenance + peer-review Task.
+
+        Nothing the agent writes is active care. `status: draft` plus a Task is the
+        machine-checkable form of "peer reviewed by experts" — a human commits it.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        care_plan = {
+            "resourceType": "CarePlan",
+            "status": "draft",
+            "intent": "proposal",
+            "title": title,
+            "description": summary,
+            "subject": {"reference": f"Patient/{patient_id}"},
+            "encounter": {"reference": f"Encounter/{encounter_id}"},
+            "created": now,
+            "author": {"display": "Preflight intake agent (AI)"},
+            "activity": [
+                {"detail": {"status": "not-started", "description": a}} for a in activities
+            ],
+        }
+        if citations:
+            care_plan["note"] = [
+                {
+                    "text": "Evidence: "
+                    + "; ".join(
+                        f"{c.get('title')} ({c.get('journal') or ''} {c.get('year') or ''})"
+                        f"{' doi:' + c['doi'] if c.get('doi') else ''}"
+                        for c in citations
+                    )
+                }
+            ]
+
+        if self._client:
+            created_plan = self._client.create_resource(care_plan)
+        else:
+            care_plan["id"] = f"plan-{uuid4().hex[:8]}"
+            self._mock_store["CarePlan"].append(care_plan)
+            created_plan = care_plan
+
+        provenance = {
+            "resourceType": "Provenance",
+            "target": [{"reference": f"CarePlan/{created_plan['id']}"}],
+            "recorded": now,
+            "activity": {
+                "coding": [
+                    {
+                        "system": "http://terminology.hl7.org/CodeSystem/v3-DataOperation",
+                        "code": "CREATE",
+                    }
+                ]
+            },
+            "agent": [
+                {
+                    "type": {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/provenance-participant-type",
+                                "code": "author",
+                            }
+                        ]
+                    },
+                    "who": {"display": "Preflight intake agent (AI)"},
+                },
+                {
+                    "type": {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/provenance-participant-type",
+                                "code": "verifier",
+                            }
+                        ]
+                    },
+                    "who": {"display": reviewer_display},
+                },
+            ],
+        }
+        task = {
+            "resourceType": "Task",
+            "status": "requested",
+            "intent": "order",
+            "priority": "routine",
+            "code": {"text": "Peer review AI-proposed care plan"},
+            "description": f"Review and commit or reject: {title}",
+            "for": {"reference": f"Patient/{patient_id}"},
+            "encounter": {"reference": f"Encounter/{encounter_id}"},
+            "focus": {"reference": f"CarePlan/{created_plan['id']}"},
+            "authoredOn": now,
+            "requester": {"display": "Preflight intake agent (AI)"},
+            "owner": {"display": reviewer_display},
+        }
+
+        if self._client:
+            created_prov = self._client.create_resource(provenance)
+            created_task = self._client.create_resource(task)
+        else:
+            provenance["id"] = f"prov-{uuid4().hex[:8]}"
+            task["id"] = f"task-{uuid4().hex[:8]}"
+            self._mock_store["Provenance"].append(provenance)
+            self._mock_store["Task"].append(task)
+            created_prov, created_task = provenance, task
+
+        return {
+            "care_plan_id": created_plan["id"],
+            "provenance_id": created_prov["id"],
+            "task_id": created_task["id"],
+            "status": "draft",
+            "mode": self.mode,
+        }
+
+    def list_proposals(self, encounter_id: str | None = None) -> list[dict[str, Any]]:
+        """AI-authored CarePlans with their review Task, newest first."""
+        plans: list[dict[str, Any]] = []
+        tasks: list[dict[str, Any]] = []
+        if self._client:
+            try:
+                plans = list(self._client.search_resources("CarePlan", {"_count": "50"}))
+                tasks = list(self._client.search_resources("Task", {"_count": "50"}))
+            except Exception:
+                plans, tasks = [], []
+        else:
+            plans = list(self._mock_store["CarePlan"])
+            tasks = list(self._mock_store["Task"])
+
+        task_by_plan = {
+            (t.get("focus") or {}).get("reference"): t for t in tasks
+        }
+        out: list[dict[str, Any]] = []
+        for plan in plans:
+            ref = f"CarePlan/{plan.get('id')}"
+            if encounter_id and (plan.get("encounter") or {}).get(
+                "reference"
+            ) != f"Encounter/{encounter_id}":
+                continue
+            task = task_by_plan.get(ref) or {}
+            out.append(
+                {
+                    "care_plan_id": plan.get("id"),
+                    "title": plan.get("title"),
+                    "summary": plan.get("description"),
+                    "status": plan.get("status"),
+                    "intent": plan.get("intent"),
+                    "author": (plan.get("author") or {}).get("display"),
+                    "created": plan.get("created"),
+                    "encounter_id": ((plan.get("encounter") or {}).get("reference") or "").split("/")[-1],
+                    "activities": [
+                        (a.get("detail") or {}).get("description")
+                        for a in plan.get("activity") or []
+                    ],
+                    "evidence": [n.get("text") for n in plan.get("note") or []],
+                    "task_id": task.get("id"),
+                    "task_status": task.get("status"),
+                    "reviewer": (task.get("owner") or {}).get("display"),
+                    "awaiting_review": plan.get("status") == "draft",
+                }
+            )
+        out.sort(key=lambda p: p.get("created") or "", reverse=True)
+        return out
+
+    def commit_care_plan(
+        self, care_plan_id: str, *, reviewer: str, approve: bool = True, note: str = ""
+    ) -> dict[str, Any]:
+        """Human decision on an agent proposal — the only path to active care."""
+        now = datetime.now(timezone.utc).isoformat()
+        new_status = "active" if approve else "revoked"
+
+        plan = None
+        if self._client:
+            plan = self._client.read_resource("CarePlan", care_plan_id)
+            plan["status"] = new_status
+            plan = self._client.update_resource(plan)
+        else:
+            for p in self._mock_store["CarePlan"]:
+                if p.get("id") == care_plan_id:
+                    p["status"] = new_status
+                    plan = p
+                    break
+
+        provenance = {
+            "resourceType": "Provenance",
+            "target": [{"reference": f"CarePlan/{care_plan_id}"}],
+            "recorded": now,
+            "activity": {
+                "coding": [
+                    {
+                        "system": "http://terminology.hl7.org/CodeSystem/v3-DataOperation",
+                        "code": "UPDATE",
+                    }
+                ]
+            },
+            "agent": [
+                {
+                    "type": {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/provenance-participant-type",
+                                "code": "attester",
+                            }
+                        ]
+                    },
+                    "who": {"display": reviewer},
+                }
+            ],
+        }
+        if note:
+            provenance["reason"] = [{"text": note}]
+
+        tasks_closed: list[str] = []
+        if self._client:
+            self._client.create_resource(provenance)
+            try:
+                for t in self._client.search_resources(
+                    "Task", {"focus": f"CarePlan/{care_plan_id}"}
+                ):
+                    t["status"] = "completed" if approve else "rejected"
+                    self._client.update_resource(t)
+                    tasks_closed.append(str(t.get("id")))
+            except Exception:
+                pass
+        else:
+            provenance["id"] = f"prov-{uuid4().hex[:8]}"
+            self._mock_store["Provenance"].append(provenance)
+            for t in self._mock_store["Task"]:
+                if (t.get("focus") or {}).get("reference") == f"CarePlan/{care_plan_id}":
+                    t["status"] = "completed" if approve else "rejected"
+                    tasks_closed.append(str(t.get("id")))
+
+        return {
+            "care_plan_id": care_plan_id,
+            "status": new_status,
+            "reviewer": reviewer,
+            "tasks_closed": tasks_closed,
+            "plan": plan,
+            "mode": self.mode,
         }
 
     def get_encounter_chart(self, encounter_id: str) -> dict[str, Any]:

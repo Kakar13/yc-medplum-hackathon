@@ -11,9 +11,11 @@ __pycache__/
 # Vendor clone — run locally via docker compose (see agent/README)
 infra/open-wearables/
 infra/medplum/
+infra/haarf/
 
-# OAuth tokens for the connected Whoop strap — never commit
+# OAuth tokens + pending CSRF states for the connected Whoop strap — never commit
 agent/.whoop_tokens.json
+agent/.whoop_states.json
 
 # Web
 web/node_modules/
