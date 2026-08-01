@@ -81,6 +81,25 @@ cd agent && python scripts/haarf_scorecard.py
 Then open http://localhost:5173 — intake at `/`, review queue at `/review`, governance at
 `/trust`.
 
+### Teammates: getting the same tree
+
+```bash
+git clone https://github.com/Kakar13/yc-medplum-hackathon.git
+cd yc-medplum-hackathon
+cp agent/.env.example agent/.env       # then fill in the keys
+./scripts/bootstrap_vendor.sh          # optional: fetches Medplum monorepo (302 MB)
+```
+
+[HAARF][haarf-repo] and [Open Wearables][ow-repo] come with the clone — they're committed under
+`infra/` (45 MB) so you have the reference material without fetching anything. The Medplum
+monorepo is left out because it's 302 MB on its own; the script pulls it at the same pinned
+commit if you want the doc paths cited in
+[docs/AGENT_GOVERNANCE.md](docs/AGENT_GOVERNANCE.md) to resolve locally. The agent and web app
+run without it. Provenance, pinned SHAs and licenses: [infra/README.md](infra/README.md).
+
+[haarf-repo]: https://github.com/Task-force-for-AI-agents-in-Healthcare/haarf
+[ow-repo]: https://github.com/the-momentum/open-wearables
+
 ## Schedule | Aug 1, 2026 (PT)
 
 | Time | Activity |

@@ -38,6 +38,33 @@ measures it.
 
 Secure photo path uses Medplum core ([Binary](https://www.medplum.com/docs/fhir-datastore/binary-data), [securityContext](https://www.medplum.com/docs/access/binary-security-context)). The phone never receives client secrets — only a short-lived capture token; upload is proxied by this API.
 
+### Context pipeline, as whiteboarded
+
+![Whiteboard: Medplum EHR → ETL pre-call → Context → Moss (index / conversational index / session) → Deepgram](../docs/assets/whiteboard-context-pipeline.png)
+
+The read path we built matches this:
+
+| Whiteboard | Code | Notes |
+|---|---|---|
+| Medplum EHR → **ETL, pre-call** | `synthea_import.bundle_to_docs` | FHIR Bundle flattened to text docs ahead of the call, not during it |
+| **Context** | `data/sample_history.json` | 18 docs; merges the eczema and asthma bundles so retrieval isn't single-condition |
+| Moss → **index** | `patient-history` via `ensure_index()` | Long-term lane, upserted idempotently, then `load_index` for sub-10ms queries |
+| Moss → **session** | `preflight-session` via `add_turn()` | Live transcript turns, partitioned by `encounter` metadata |
+| Moss → **conversational index** | `push_session()` | Promotes the session into a persisted index so a human inherits the conversation |
+| Moss → **Deepgram** | `moss_search` on each turn | Retrieval grounds the reply; Nova-3 handles STT |
+| **Super engine** | `graph.py` | The LangGraph agent that decides which lane to pull from |
+
+Two deliberate departures. The whiteboard is one-directional — EHR out to the voice agent — but
+the agent also **writes back** (Encounter, Composition, draft CarePlan), and that return arrow
+is where every safety risk lives. Everything on the read path can be wrong and you get a bad
+answer; get the write path wrong and you have altered the wrong person's chart. Hence the
+capability gateway sitting between the agent and Medplum, which the diagram has no box for.
+
+Second, `Context → Moss` needs a relevance floor. Moss always returns `top_k` documents with no
+way to signal "nothing matched", so without one a knee complaint retrieves eczema history at
+~0.6 and it enters the prompt as though it belonged there. See
+[Known limitations](#known-limitations).
+
 ## Setup
 
 ```bash
