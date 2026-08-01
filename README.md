@@ -44,8 +44,14 @@ Every attendee walks out with swag.
 - Deepgram — free account with $200 credits (STT / TTS / voice agents); [Startup Program](https://deepgram.com) for credits after the event
 - Medplum Discord → hackathon channel
 
-## Agent skill
+## Agent skills
 
-Project skill for Cursor agents (judging, stack, build patterns):
+Cursor project skills (auto-discoverable):
 
-[`.cursor/skills/yc-medplum-hackathon/SKILL.md`](.cursor/skills/yc-medplum-hackathon/SKILL.md)
+| Skill | Path |
+|-------|------|
+| Hackathon context & judging | [`.cursor/skills/yc-medplum-hackathon/SKILL.md`](.cursor/skills/yc-medplum-hackathon/SKILL.md) |
+| Medplum (FHIR / headless EHR) | [`.cursor/skills/medplum/SKILL.md`](.cursor/skills/medplum/SKILL.md) |
+| Deepgram STT / TTS / Voice Agent | [`.cursor/skills/deepgram/SKILL.md`](.cursor/skills/deepgram/SKILL.md) |
+| Stedi test mode (eligibility / claims) | [`.cursor/skills/stedi-healthcare/SKILL.md`](.cursor/skills/stedi-healthcare/SKILL.md) |
+| Moss real-time retrieval | [`.cursor/skills/moss-dev/SKILL.md`](.cursor/skills/moss-dev/SKILL.md) |

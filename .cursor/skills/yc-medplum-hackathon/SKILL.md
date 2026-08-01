@@ -57,12 +57,14 @@ Every attendee walks out with swag.
 
 ## Sponsor stack & resources
 
-| Tech | Role | Links |
-|------|------|--------|
-| Medplum | Open-source healthcare developer platform (FHIR) | [Docs](https://www.medplum.com/docs), [AI coding assistants](https://www.medplum.com/docs) |
-| Deepgram | Speech-to-text, text-to-speech, voice agents ($200 free credits, no card) | [Signup](https://deepgram.com), [Startup Program](https://deepgram.com) |
-| Stedi | Healthcare APIs (eligibility, claims) in test mode | [Stedi test mode](https://www.stedi.com) |
-| moss.dev | Real-time semantic search runtime (&lt;10ms retrieve for voice agents/copilots) | moss.dev |
+| Tech | Role | Links | Project skill |
+|------|------|--------|---------------|
+| Medplum | Headless EHR / FHIR developer platform | [Docs](https://www.medplum.com/docs) · [GitHub](https://github.com/medplum/medplum) | [medplum](../medplum/SKILL.md) |
+| Deepgram | STT / TTS / Voice Agent ($200 free credits) | [Docs](https://developers.deepgram.com/home.md) | [deepgram](../deepgram/SKILL.md) |
+| Stedi | Eligibility / claims in test mode (no PHI to payers) | [Test mode](https://www.stedi.com/docs/healthcare/test-mode) | [stedi-healthcare](../stedi-healthcare/SKILL.md) |
+| Moss | Real-time semantic search (&lt;10ms) for voice agents | [docs.moss.dev](https://docs.moss.dev/docs) | [moss-dev](../moss-dev/SKILL.md) |
+
+When implementing Medplum, Deepgram, Stedi, or Moss, **read the linked skill first**.
 
 Help during the event: [Medplum Discord](https://discord.gg/medplum) → hackathon channel.
 
