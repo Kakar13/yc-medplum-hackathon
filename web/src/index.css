@@ -583,3 +583,554 @@ table.scorecard tr.fail td {
     overflow-x: auto;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Pre-visit console — patient · agent · clinician
+   Three panes, one conversation. Deliberately quiet: the only things that
+   move are things that actually changed, so motion carries meaning.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.console {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.console-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.1rem clamp(1rem, 3vw, 2.25rem);
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.62);
+  backdrop-filter: blur(12px);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.console-head .brand {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.console-head .mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: linear-gradient(145deg, var(--accent), var(--accent-deep));
+  box-shadow: 0 6px 18px var(--glow);
+  flex: none;
+}
+
+.console-head h1 {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 1.32rem;
+  line-height: 1;
+  margin: 0 0 0.2rem;
+  letter-spacing: -0.01em;
+}
+
+.console-head .brand p {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.head-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.pill {
+  font-size: 0.76rem;
+  padding: 0.34rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #fff;
+  white-space: nowrap;
+}
+
+.pill.subject {
+  font-weight: 600;
+}
+
+.pill.latency {
+  font-variant-numeric: tabular-nums;
+  border-color: rgba(15, 107, 86, 0.3);
+  color: var(--accent-deep);
+  background: rgba(15, 107, 86, 0.07);
+}
+
+.pill.latency em {
+  font-style: normal;
+  color: var(--muted);
+}
+
+.head-links {
+  display: flex;
+  gap: 0.9rem;
+  font-size: 0.83rem;
+}
+
+.banner {
+  margin: 0;
+  padding: 0.7rem clamp(1rem, 3vw, 2.25rem);
+  font-size: 0.86rem;
+}
+
+.banner.error {
+  background: #fdf1ea;
+  color: #7d3b0d;
+  border-bottom: 1px solid rgba(138, 75, 18, 0.2);
+}
+
+.banner.notice {
+  background: rgba(15, 107, 86, 0.08);
+  color: var(--accent-deep);
+  border-bottom: 1px solid var(--line);
+}
+
+/* ── Layout ─────────────────────────────────────────────────────────── */
+
+.triptych {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(320px, 1.05fr) minmax(300px, 0.9fr) minmax(320px, 1.05fr);
+  gap: 1px;
+  background: var(--line);
+}
+
+@media (max-width: 1180px) {
+  .triptych {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pane {
+  background: rgba(255, 255, 255, 0.72);
+  padding: 1.35rem clamp(1rem, 2vw, 1.6rem) 2rem;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+}
+
+.pane.agent {
+  background: rgba(246, 250, 248, 0.86);
+}
+
+.pane-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.pane-head h2 {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 1.02rem;
+  margin: 0;
+  letter-spacing: 0.01em;
+}
+
+.pane-tag {
+  font-size: 0.7rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.pane-tag.link {
+  color: var(--accent-deep);
+}
+
+.pane-tag.state-listening { color: var(--accent); }
+.pane-tag.state-thinking { color: #8a6a12; }
+.pane-tag.state-speaking { color: var(--accent-deep); }
+
+.pane h3 {
+  font-size: 0.79rem;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 0.6rem;
+  font-weight: 600;
+}
+
+/* ── Patient: the orb ───────────────────────────────────────────────── */
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.5rem 0 0.25rem;
+}
+
+.orb {
+  --level: 0;
+  position: relative;
+  width: 132px;
+  height: 132px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.orb:hover { background: transparent; transform: none; }
+
+.orb-core {
+  position: absolute;
+  inset: 20px;
+  border-radius: 50%;
+  background: linear-gradient(150deg, var(--accent), var(--accent-deep));
+  box-shadow: 0 10px 30px var(--glow);
+  transition: transform 90ms linear;
+  /* Scales with real mic amplitude, so the patient can see they're being heard. */
+  transform: scale(calc(1 + var(--level) * 0.14));
+}
+
+.orb-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid rgba(15, 107, 86, 0.28);
+}
+
+.orb-label {
+  position: relative;
+  z-index: 2;
+  color: #f6fffb;
+  font-weight: 600;
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
+}
+
+.orb.idle .orb-core { background: linear-gradient(150deg, #6f8880, #4a5c55); }
+
+.orb.connecting .orb-ring,
+.orb.thinking .orb-ring {
+  animation: orb-spin 1.05s linear infinite;
+  border-top-color: var(--accent);
+  border-right-color: transparent;
+}
+
+.orb.listening .orb-ring { animation: orb-pulse 2.4s ease-in-out infinite; }
+
+.orb.speaking .orb-core {
+  animation: orb-speak 1.15s ease-in-out infinite;
+}
+
+@keyframes orb-spin { to { transform: rotate(360deg); } }
+
+@keyframes orb-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.55; }
+  50% { transform: scale(1.07); opacity: 1; }
+}
+
+@keyframes orb-speak {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.18); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orb-ring, .orb-core { animation: none !important; transition: none; }
+}
+
+.stage-state {
+  margin: 0;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--muted);
+  max-width: 30ch;
+}
+
+/* ── Patient: transcript ────────────────────────────────────────────── */
+
+.transcript {
+  flex: 1;
+  min-height: 150px;
+  max-height: 40vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding-right: 0.3rem;
+}
+
+.transcript .line {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.transcript .line .who {
+  display: block;
+  font-size: 0.68rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.15rem;
+}
+
+.transcript .line.assistant {
+  padding-left: 0.8rem;
+  border-left: 2px solid var(--wash);
+}
+
+.say {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.say input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  background: #fff;
+}
+
+.say .ghost { padding: 0.7rem 0.9rem; font-size: 0.86rem; }
+
+.patient-block h3 { margin-top: 0.35rem; }
+
+.patient-block.cost p {
+  margin: 0;
+  font-size: 0.94rem;
+  padding: 0.85rem 1rem;
+  background: rgba(15, 107, 86, 0.06);
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+
+/* ── Agent pane ─────────────────────────────────────────────────────── */
+
+.facts {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+}
+
+.facts > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.84rem;
+}
+
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+.binding {
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(15, 107, 86, 0.24);
+  border-radius: 8px;
+  background: rgba(15, 107, 86, 0.05);
+}
+
+.binding h3 { margin-bottom: 0.4rem; }
+
+.binding .scope {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  word-break: break-all;
+  color: var(--accent-deep);
+}
+
+.binding-note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.tools-title { display: flex; align-items: center; gap: 0.5rem; }
+
+.tools-title .count {
+  font-variant-numeric: tabular-nums;
+  background: var(--wash);
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+  font-size: 0.72rem;
+}
+
+.tool-feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  overflow-y: auto;
+  max-height: 52vh;
+}
+
+.tool-feed > li {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  background: #fff;
+  /* New entries arrive at the top; a brief fade marks what just changed. */
+  animation: tool-in 220ms ease-out;
+}
+
+.tool-feed > li.denied { border-left-color: var(--warn); }
+
+@keyframes tool-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tool-feed > li { animation: none; }
+}
+
+.tool-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.tool-row code {
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.verdict {
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+}
+
+.verdict.allow { background: rgba(15, 107, 86, 0.12); color: var(--accent-deep); }
+.verdict.deny { background: rgba(138, 75, 18, 0.14); color: var(--warn); }
+
+.tool-row .ms {
+  margin-left: auto;
+  font-size: 0.74rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.tool-feed .args {
+  margin: 0.35rem 0 0;
+  font-size: 0.74rem;
+  color: var(--muted);
+  word-break: break-word;
+}
+
+.tool-feed .preview {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  max-height: 4.4em;
+  overflow: hidden;
+}
+
+/* ── Clinician pane ─────────────────────────────────────────────────── */
+
+.clin-block { min-width: 0; }
+
+.note {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 0.85rem 1rem;
+}
+
+.note-title {
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.note pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  max-height: 26vh;
+  overflow-y: auto;
+}
+
+.proposal-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 0.9rem 1rem;
+}
+
+.proposal-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.45rem;
+}
+
+.proposal-card p { margin: 0 0 0.55rem; font-size: 0.9rem; line-height: 1.5; }
+
+.proposal-card ul {
+  margin: 0 0 0.6rem;
+  padding-left: 1.1rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.proposal-card .attribution {
+  font-size: 0.78rem;
+  color: var(--muted);
+  border-top: 1px dashed var(--line);
+  padding-top: 0.5rem;
+}
+
+.btn.small {
+  display: inline-block;
+  padding: 0.5rem 0.8rem;
+  font-size: 0.83rem;
+  text-decoration: none;
+  color: #f7fffb;
+}
+
+.cites {
+  margin: 0;
+  padding-left: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  font-size: 0.87rem;
+}
+
+.cites .cite-meta {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.pane .empty {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--muted);
+  line-height: 1.5;
+}

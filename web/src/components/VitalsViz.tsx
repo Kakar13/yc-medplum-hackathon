@@ -58,14 +58,21 @@ function label(o: Observation): string {
   return coding?.display || coding?.code || 'Measurement';
 }
 
-export function VitalsViz({ observations }: { observations: Observation[] }) {
+export function VitalsViz({
+  observations,
+  friendly,
+}: {
+  observations: Observation[];
+  /** Optional plain-language relabelling, for surfaces the patient reads. */
+  friendly?: Record<string, string>;
+}) {
   const quantities = observations
     .map((o) => {
       const vq = o.valueQuantity as { value?: number; unit?: string } | undefined;
       if (!vq || typeof vq.value !== 'number') return null;
-      const name = label(o);
-      const band = BANDS.find((b) => b.match.test(name));
-      return { name, value: vq.value, unit: vq.unit || '', band };
+      const coded = label(o);
+      const band = BANDS.find((b) => b.match.test(coded));
+      return { name: friendly?.[coded] ?? coded, value: vq.value, unit: vq.unit || '', band };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
 
