@@ -149,15 +149,19 @@ class OpenWearablesService:
             reasons.append(f"fragmented sleep (efficiency {round(efficiency, 1)}%)")
         if isinstance(awake_min, (int, float)) and awake_min >= 60:
             score += 1
-            reasons.append(f"{awake_min} min awake overnight (possible nocturnal itch)")
+            reasons.append(f"{awake_min} min awake overnight (possible nocturnal symptoms)")
         if isinstance(skin_temp, (int, float)) and skin_temp >= 34.5:
             score += 1
             reasons.append(f"elevated skin temperature ({round(skin_temp, 1)} °C)")
 
         level = "high" if score >= 4 else "moderate" if score >= 2 else "low"
         triggered = level in {"moderate", "high"}
+        # Name only the strap, not the transport: the same evaluation runs whether the data came
+        # from the direct Whoop API or an Open Wearables instance, and crediting the wrong one in
+        # clinician-facing text is a provenance claim we cannot back up. The snapshot's `source`
+        # and `mode` fields carry the transport for anyone who needs it.
         context = (
-            f"Wearable risk signal ({level}) via Open Wearables / {provider}: "
+            f"Wearable risk signal ({level}) from {provider}: "
             + ("; ".join(reasons) if reasons else "within baseline")
             + ". Not a diagnosis — consider history-aware voice check-in."
         )

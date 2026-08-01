@@ -61,7 +61,7 @@ class CaptureLinkRequest(BaseModel):
     patient_id: str | None = None
     encounter_id: str | None = None
     content_type: str = "image/jpeg"
-    reason: str = "Eczema / rash flare photo"
+    reason: str = "Clinical photo for pre-visit check-in"
 
 
 class StartSessionRequest(BaseModel):
@@ -190,7 +190,7 @@ async def wearables_to_chart(body: dict[str, Any] | None = None):
     encounter_id = body.get("encounter_id") or session.get("encounter_id")
     if not patient_id or not encounter_id:
         patient = medplum.ensure_demo_patient()
-        enc = medplum.create_encounter(patient["id"], "Wearable-triggered flare check-in")
+        enc = medplum.create_encounter(patient["id"], "Wearable-triggered pre-visit check-in")
         patient_id, encounter_id = patient["id"], enc["id"]
         session["patient_id"], session["encounter_id"] = patient_id, encounter_id
 
