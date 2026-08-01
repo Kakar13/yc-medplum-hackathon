@@ -2,6 +2,24 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 
+// The callback already tells us why authorization failed. Saying "check your credentials" for
+// every reason sends you looking in the wrong place — a rejected scope and an expired link need
+// completely different fixes.
+function whoopError(reason: string | null): string {
+  switch (reason) {
+    case 'invalid_scope':
+      return 'Whoop refused a scope this app is not granted. Enable read:recovery and read:sleep on the app in the Whoop developer dashboard.';
+    case 'state_mismatch':
+      return 'That Whoop link expired or was already used. Start the connection again.';
+    case 'access_denied':
+      return 'You declined the Whoop permission request. Retry and accept to connect.';
+    case null:
+      return 'Whoop authorization failed.';
+    default:
+      return `Whoop authorization failed (${reason}).`;
+  }
+}
+
 export function Home() {
   const [health, setHealth] = useState<Record<string, unknown> | null>(null);
   const [patientDisplay, setPatientDisplay] = useState('');
@@ -32,9 +50,10 @@ export function Home() {
   useEffect(() => {
     api.health().then(setHealth).catch(() => setHealth({ ok: false }));
     api.whoopStatus().then(setWhoop).catch(() => setWhoop(null));
-    const result = new URLSearchParams(window.location.search).get('whoop');
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get('whoop');
     if (result === 'connected') setWearableNote('Whoop connected — pulling your latest recovery and sleep.');
-    if (result === 'error') setError('Whoop authorization failed. Check the app credentials and retry.');
+    if (result === 'error') setError(whoopError(params.get('reason')));
   }, []);
 
   async function connectWhoop() {

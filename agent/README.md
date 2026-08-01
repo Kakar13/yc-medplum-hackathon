@@ -150,8 +150,13 @@ python scripts/smoke_preflight.py
 ## Connect a real Whoop
 
 1. Sign in at [developer-dashboard.whoop.com](https://developer-dashboard.whoop.com/) with your Whoop account (needs an active membership), create a Team, then an App.
-2. Scopes: `offline read:recovery read:sleep read:cycles read:workout read:body_measurement read:profile`.
-3. Redirect URI must be exactly `http://localhost:8080/wearables/whoop/callback`.
+2. Scopes: enable exactly `offline read:recovery read:sleep` — one per endpoint we call, plus
+   `offline` so tokens refresh. Whoop rejects the *entire* authorization request with
+   `invalid_scope` if the app is not granted something you ask for, and the error names only the
+   first offender, so asking for scopes you never read just costs you round trips.
+3. Redirect URI must be exactly `http://localhost:8080/wearables/whoop/callback` — added under
+   **Redirect URLs** on the app. A mismatch fails at Whoop before reaching us, so it never
+   appears in our logs.
 4. Put `WHOOP_CLIENT_ID` / `WHOOP_CLIENT_SECRET` in `.env` and restart the API.
 5. Click **Connect my Whoop** on the web app, authorize, and you land back with `?whoop=connected`.
 6. **Pull signals into chart** writes resting HR, HRV, SpO2, skin temp, recovery, sleep duration/efficiency/awake time as coded `Observation`s on the encounter.

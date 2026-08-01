@@ -38,10 +38,11 @@ class Settings(BaseSettings):
     whoop_client_id: str = ""
     whoop_client_secret: str = ""
     whoop_redirect_uri: str = "http://localhost:8080/wearables/whoop/callback"
-    whoop_scope: str = (
-        "offline read:recovery read:sleep read:cycles read:workout "
-        "read:body_measurement read:profile"
-    )
+    # One scope per endpoint we actually call — /recovery, /activity/sleep, and offline so tokens
+    # refresh without re-authorising. Whoop rejects the whole authorization request if the app is
+    # not granted a requested scope, so asking for read:cycles / read:workout /
+    # read:body_measurement / read:profile that we never read only adds ways to fail.
+    whoop_scope: str = "offline read:recovery read:sleep"
 
     # Secure photo capture — public URL of the web app
     public_app_url: str = "http://localhost:5173"
