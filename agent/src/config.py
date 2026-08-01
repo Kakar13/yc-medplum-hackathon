@@ -33,12 +33,22 @@ class Settings(BaseSettings):
     open_wearables_api_key: str = ""
     open_wearables_user_id: str = ""
 
+    # Secure photo capture (FlareCheck) — public URL of the web app
+    public_app_url: str = "http://localhost:5173"
+    public_api_url: str = "http://localhost:8080"
+    capture_token_secret: str = ""
+
     # mock | live
     agent_mode: str = "mock"
 
     @property
     def use_mock(self) -> bool:
-        return self.agent_mode.lower() != "live"
+        # Auto-live when Medplum credentials present unless explicitly mock
+        if self.agent_mode.lower() == "live":
+            return False
+        if self.agent_mode.lower() == "mock":
+            return True
+        return not bool(self.medplum_client_id and self.medplum_client_secret)
 
 
 @lru_cache

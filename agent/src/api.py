@@ -1,18 +1,31 @@
-"""FastAPI surface: health + text turn + Deepgram function-call webhook stub."""
+"""FastAPI: health, turns, Deepgram stub, secure capture links, clinician BFF."""
 
 from __future__ import annotations
 
 import uuid
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, File, Header, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from .capture_links import get_capture_store
 from .config import get_settings
 from .graph import build_graph, run_turn
+from .medplum_client import MedplumService
 from .open_wearables import OpenWearablesService
+from .stedi_client import StediService
+from .tools import get_session
 
-app = FastAPI(title="YC Medplum Hackathon Agent", version="0.1.0")
+app = FastAPI(title="FlareCheck Agent", version="0.2.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 _agent = None
 _thread_default = "api-default"
@@ -23,6 +36,10 @@ def _get_agent():
     if _agent is None:
         _agent, _, _ = build_graph()
     return _agent
+
+
+def _medplum() -> MedplumService:
+    return MedplumService()
 
 
 class TurnRequest(BaseModel):
@@ -37,30 +54,68 @@ class TurnResponse(BaseModel):
     session: dict[str, Any] = Field(default_factory=dict)
 
 
+class CaptureLinkRequest(BaseModel):
+    patient_id: str | None = None
+    encounter_id: str | None = None
+    content_type: str = "image/jpeg"
+    reason: str = "Eczema / rash flare photo"
+
+
+class StartSessionRequest(BaseModel):
+    reason: str = "Flare check-in — eczema / rash"
+    message: str | None = None
+
+
 @app.get("/health")
 async def health():
     s = get_settings()
     return {
         "ok": True,
+        "product": "FlareCheck",
         "agent_mode": s.agent_mode,
+        "medplum_mode": "live" if not s.use_mock and s.medplum_client_id else "mock",
         "openai": bool(s.openai_api_key),
         "medplum": bool(s.medplum_client_id),
         "moss": bool(s.moss_project_id),
         "deepgram": bool(s.deepgram_api_key),
         "stedi": bool(s.stedi_api_key),
         "open_wearables": bool(s.open_wearables_api_key),
+        "public_app_url": s.public_app_url,
     }
+
+
+@app.post("/session/start")
+async def start_session(body: StartSessionRequest):
+    """Ensure Patient + Encounter; optional first agent turn."""
+    medplum = _medplum()
+    patient = medplum.ensure_demo_patient()
+    enc = medplum.create_encounter(patient["id"], body.reason)
+    session = get_session()
+    session["patient_id"] = patient["id"]
+    session["encounter_id"] = enc["id"]
+    out: dict[str, Any] = {
+        "patient_id": patient["id"],
+        "patient_display": medplum.patient_display(patient),
+        "encounter_id": enc["id"],
+        "mode": medplum.mode,
+        "session": session,
+    }
+    if body.message:
+        agent = _get_agent()
+        turn = await run_turn(agent, str(uuid.uuid4()), body.message)
+        out["turn"] = turn
+    return out
 
 
 @app.get("/wearables/risk")
 async def wearables_risk(user_id: str | None = None):
-    """Open Wearables recovery/sleep → triage risk (Whoop/Oura/Fitbit/… via one API)."""
     return await OpenWearablesService().risk_snapshot(user_id)
 
 
 @app.get("/wearables/oauth/{provider}/authorize")
-async def wearables_authorize(provider: str, user_id: str, redirect_uri: str = "http://localhost:3000/connected"):
-    """Proxy to Open Wearables OAuth authorize URL for whoop|oura|fitbit|garmin|…"""
+async def wearables_authorize(
+    provider: str, user_id: str, redirect_uri: str = "http://localhost:3000/connected"
+):
     return await OpenWearablesService().authorize_url(provider, user_id, redirect_uri)
 
 
@@ -76,15 +131,208 @@ async def turn(body: TurnRequest):
     )
 
 
+@app.post("/capture-links")
+async def create_capture_link(body: CaptureLinkRequest):
+    """Issue short-lived secure capture URL (no Medplum secrets to phone)."""
+    medplum = _medplum()
+    store = get_capture_store()
+    session = get_session()
+
+    patient_id = body.patient_id or session.get("patient_id")
+    encounter_id = body.encounter_id or session.get("encounter_id")
+    if not patient_id:
+        patient = medplum.ensure_demo_patient()
+        patient_id = patient["id"]
+        session["patient_id"] = patient_id
+        patient_display = medplum.patient_display(patient)
+    else:
+        try:
+            patient = (
+                medplum._client.read_resource("Patient", patient_id)
+                if medplum._client
+                else next(
+                    (p for p in medplum._mock_store["Patient"] if p["id"] == patient_id),
+                    {"name": [{"given": ["Jordan"], "family": "Lee"}]},
+                )
+            )
+            patient_display = medplum.patient_display(patient)
+        except Exception:
+            patient_display = "Patient"
+
+    if not encounter_id:
+        enc = medplum.create_encounter(patient_id, body.reason)
+        encounter_id = enc["id"]
+        session["encounter_id"] = encounter_id
+
+    binary = medplum.create_upload_binary(patient_id, body.content_type)
+    binary_id = binary["id"]
+    upload_url = medplum.presigned_upload_url(binary_id)
+    # Prefer proxy upload through our API (avoids browser CORS to storage.medplum.com)
+    api_base = get_settings().public_api_url.rstrip("/")
+    link = store.issue(
+        patient_id=patient_id,
+        encounter_id=encounter_id,
+        binary_id=binary_id,
+        upload_url=upload_url,
+        content_type=body.content_type,
+        patient_display=patient_display,
+    )
+    public = store.public_url(link.token)
+    return {
+        "token": link.token,
+        "url": public,
+        "expires_at": link.expires_at,
+        "patient_id": patient_id,
+        "encounter_id": encounter_id,
+        "binary_id": binary_id,
+        "proxy_upload_url": f"{api_base}/capture/{link.token}/upload",
+        "mode": medplum.mode,
+    }
+
+
+@app.get("/capture/{token}")
+async def get_capture(token: str, s: str | None = None):
+    import hmac
+    import time
+
+    store = get_capture_store()
+    link = store.peek(token)
+    if not link or link.used or time.time() > link.expires_at:
+        raise HTTPException(404, "Capture link invalid, expired, or already used")
+    if s is not None and not hmac.compare_digest(store._sign(token), s):
+        raise HTTPException(403, "Invalid capture signature")
+    api_base = get_settings().public_api_url.rstrip("/")
+    return {
+        "token": link.token,
+        "patient_display": link.patient_display,
+        "patient_id": link.patient_id,
+        "encounter_id": link.encounter_id,
+        "content_type": link.content_type,
+        "expires_at": link.expires_at,
+        "proxy_upload_url": f"{api_base}/capture/{token}/upload",
+        "direct_upload_url": link.upload_url
+        if link.upload_url.startswith("http")
+        else None,
+        "instructions": (
+            "Take a clear photo of the affected skin. This link expires in 15 minutes "
+            "and can be used once. Not a diagnosis — for your clinician's chart."
+        ),
+    }
+
+
+@app.post("/capture/{token}/upload")
+async def upload_capture(
+    token: str,
+    file: UploadFile = File(...),
+    s: str | None = None,
+    x_capture_sig: str | None = Header(default=None, alias="X-Capture-Sig"),
+):
+    """Proxy photo bytes → Medplum Binary (keeps secrets server-side; avoids CORS)."""
+    store = get_capture_store()
+    sig = s or x_capture_sig
+    link = store.get(token, sig=sig) if sig else store.peek(token)
+    if not link or link.used:
+        raise HTTPException(404, "Capture link invalid or already used")
+    import time
+
+    if time.time() > link.expires_at:
+        raise HTTPException(410, "Capture link expired")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "Empty file")
+    if len(content) > 12 * 1024 * 1024:
+        raise HTTPException(413, "File too large (max 12MB)")
+
+    content_type = file.content_type or link.content_type or "image/jpeg"
+    medplum = _medplum()
+    uploaded_binary_id = link.binary_id
+    if link.upload_url.startswith("http"):
+        try:
+            medplum.upload_bytes_to_binary(
+                link.binary_id, content, content_type, upload_url=link.upload_url
+            )
+        except Exception:
+            # Fallback: create new Binary via client upload
+            if medplum._client:
+                created = medplum._client.upload_binary(content, content_type)
+                uploaded_binary_id = created["id"]
+            else:
+                medplum.upload_bytes_to_binary(link.binary_id, content, content_type)
+    else:
+        if medplum._client:
+            created = medplum._client.upload_binary(content, content_type)
+            uploaded_binary_id = created["id"]
+        else:
+            medplum.upload_bytes_to_binary(link.binary_id, content, content_type)
+
+    finalized = medplum.finalize_flare_photo(
+        patient_id=link.patient_id,
+        encounter_id=link.encounter_id,
+        binary_id=uploaded_binary_id,
+        content_type=content_type,
+    )
+    store.mark_complete(
+        token,
+        media_id=finalized.get("media_id"),
+        document_reference_id=finalized.get("document_reference_id"),
+    )
+    return {
+        "ok": True,
+        "encounter_id": link.encounter_id,
+        "patient_id": link.patient_id,
+        **finalized,
+    }
+
+
+@app.post("/capture/{token}/complete")
+async def complete_capture(token: str, body: dict[str, Any] | None = None):
+    """Mark complete when browser uploaded directly to Medplum presigned URL."""
+    store = get_capture_store()
+    link = store.peek(token)
+    if not link or link.used:
+        raise HTTPException(404, "Capture link invalid or already used")
+    import time
+
+    if time.time() > link.expires_at:
+        raise HTTPException(410, "Capture link expired")
+
+    binary_id = (body or {}).get("binary_id") or link.binary_id
+    medplum = _medplum()
+    finalized = medplum.finalize_flare_photo(
+        patient_id=link.patient_id,
+        encounter_id=link.encounter_id,
+        binary_id=binary_id,
+        content_type=link.content_type,
+    )
+    store.mark_complete(
+        token,
+        media_id=finalized.get("media_id"),
+        document_reference_id=finalized.get("document_reference_id"),
+    )
+    return {"ok": True, "encounter_id": link.encounter_id, **finalized}
+
+
+@app.get("/chart/{encounter_id}")
+async def chart(encounter_id: str):
+    """Clinician BFF — Encounter + notes + photos (server credentials)."""
+    medplum = _medplum()
+    data = medplum.get_encounter_chart(encounter_id)
+    stedi = await StediService().check_text("urgent tele-dermatology")
+    data["eligibility"] = stedi
+    data["handoff_hint"] = (
+        "If patient requested a human, continue from this chart — do not restart intake."
+    )
+    return data
+
+
+@app.get("/session")
+async def session():
+    return get_session()
+
+
 @app.post("/deepgram/function")
 async def deepgram_function(payload: dict[str, Any]):
-    """Stub for Deepgram Voice Agent FunctionCallRequest (client-side execution).
-
-    Docs: https://developers.deepgram.com/docs/voice-agents-function-calling
-    Expects something like:
-      { "function_name": "clinical_turn", "input": { "message": "..." } }
-    or raw FunctionCallRequest fields — we normalize loosely.
-    """
     name = (
         payload.get("function_name")
         or payload.get("name")
@@ -113,7 +361,6 @@ async def deepgram_function(payload: dict[str, Any]):
             message,
             wearable_context=args.get("wearable_context"),
         )
-        # Shape compatible with FunctionCallResponse content
         return {
             "type": "FunctionCallResponse",
             "name": name or "clinical_turn",
