@@ -2,10 +2,25 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+import logging
+import time
 import uuid
+from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, File, Form, Header, HTTPException, Response, UploadFile
+from fastapi import (
+    FastAPI,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Response,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
@@ -17,10 +32,45 @@ from .graph import build_graph, run_turn
 from .medplum_client import MedplumService
 from .open_wearables import OpenWearablesService
 from .stedi_client import StediService
-from .tools import bind_session_patient, get_session
+from .tools import bind_session_patient, get_moss, get_session
+from .voice_live import VoiceBridge
 from .whoop_client import WhoopClient, WhoopNotConnected, WhoopStateInvalid
 
-app = FastAPI(title="Preflight Agent", version="0.3.0")
+logger = logging.getLogger(__name__)
+
+# Uvicorn configures its own loggers and leaves application loggers at WARNING, which silently
+# hid the Moss warm-up result — and an unverifiable warm-up is indistinguishable from none.
+logging.getLogger("src").setLevel(logging.INFO)
+if not logging.getLogger("src").handlers:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s:    %(message)s")
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Pay Moss's index load at boot instead of on the patient's first sentence.
+
+    Loading the long-term index costs ~6s, and lazily it lands inside the first `moss_search` of
+    a live call — which measured as 6.4s of an 8.2s first response. Warming here moves that cost
+    to a moment when nobody is waiting.
+    """
+    try:
+        _get_agent()  # binds Moss/Medplum/Stedi singletons the tools rely on
+        moss = get_moss()
+        if moss is not None:
+            started = time.perf_counter()
+            info = await moss.ensure_index()
+            logger.info(
+                "Moss warm: index=%s docs=%s in %.0fms",
+                info.get("index"),
+                info.get("doc_count_before", "?"),
+                (time.perf_counter() - started) * 1000,
+            )
+    except Exception:  # noqa: BLE001 - a cold Moss must not stop the API from serving
+        logger.warning("Moss warm-up skipped", exc_info=True)
+    yield
+
+
+app = FastAPI(title="Preflight Agent", version="0.4.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -628,6 +678,95 @@ async def deepgram_function(payload: dict[str, Any]):
         "name": name or "unknown",
         "content": f"Unhandled function stub: {name}",
     }
+
+
+@app.websocket("/voice/live")
+async def voice_live(ws: WebSocket):
+    """Full-duplex voice: browser PCM in, agent PCM out, tool calls adjudicated in between.
+
+    The browser never sees the Deepgram key, and every function the model invokes goes through
+    the same capability gateway as the text path — so the wrong-patient denial holds on the
+    voice surface too, not just where it is easy to test.
+    """
+    await ws.accept()
+
+    # Tools reach Moss/Medplum/Stedi through module-level singletons that only build_graph()
+    # populates. The voice path does not otherwise need the graph, but without this every tool
+    # raises a bare AssertionError and the model retries it forever.
+    _get_agent()
+
+    # Bind the patient before a single sample of audio moves. Binding on first tool call would
+    # make the subject of care depend on model behaviour, which is the failure this prevents.
+    medplum = _medplum()
+    session = get_session()
+    if not session.get("patient_id"):
+        patient, cap = bind_session_patient(medplum)
+        if not session.get("encounter_id"):
+            enc = medplum.create_encounter(patient["id"], "Voice pre-visit check-in")
+            session["encounter_id"] = enc["id"]
+        await ws.send_json(
+            {
+                "type": "Bound",
+                "patient_id": patient["id"],
+                "patient_display": medplum.patient_display(patient),
+                "encounter_id": session["encounter_id"],
+                "capability": cap.public(),
+            }
+        )
+    else:
+        cap = get_gateway().active  # property, not a method
+        if cap is None:
+            # Session survived but the capability lapsed — re-bind rather than run unbound.
+            patient, cap = bind_session_patient(medplum)
+        await ws.send_json(
+            {
+                "type": "Bound",
+                "patient_id": session.get("patient_id"),
+                "patient_display": medplum.patient_display(),
+                "encounter_id": session.get("encounter_id"),
+                "capability": cap.public() if cap else None,
+            }
+        )
+
+    inbound: asyncio.Queue = asyncio.Queue()
+
+    async def reader() -> None:
+        """Demux the browser socket: binary is mic audio, text is control."""
+        try:
+            while True:
+                msg = await ws.receive()
+                if msg.get("type") == "websocket.disconnect":
+                    break
+                if (data := msg.get("bytes")) is not None:
+                    await inbound.put(data)
+                elif (text := msg.get("text")) is not None:
+                    try:
+                        await inbound.put(json.loads(text))
+                    except json.JSONDecodeError:
+                        pass
+        except WebSocketDisconnect:
+            pass
+        finally:
+            await inbound.put(None)
+
+    bridge = VoiceBridge(send_json=ws.send_json, send_bytes=ws.send_bytes)
+    read_task = asyncio.create_task(reader())
+    try:
+        await bridge.run(inbound.get)
+    except WebSocketDisconnect:
+        pass
+    except Exception as exc:  # noqa: BLE001 - surface the reason in the UI, not a stack trace
+        logger.exception("voice bridge failed")
+        try:
+            await ws.send_json({"type": "Error", "message": str(exc)})
+        except Exception:
+            pass
+    finally:
+        read_task.cancel()
+        try:
+            await ws.close()
+        except Exception:
+            pass
 
 
 def main():

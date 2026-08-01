@@ -55,6 +55,11 @@ def get_session() -> dict:
     return _session
 
 
+def get_moss() -> MossService | None:
+    """The Moss instance the tools actually use — so callers warm the same index, not a new one."""
+    return _moss
+
+
 def guarded(fn):
     """Adjudicate a tool call against the active patient capability before running it."""
     gateway = get_gateway()
