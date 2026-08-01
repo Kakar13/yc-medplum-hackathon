@@ -1,239 +1,307 @@
-# Product brief — FlareCheck
+# Product brief — Preflight
 
-YC x Medplum Agentic Healthcare Hackathon · Aug 1, 2026  
-**Working title: FlareCheck** (was PreChart / PulseCheck / VitalsCall)
+YC x Medplum Agentic Healthcare Hackathon · Aug 1, 2026
+**Preflight** (was FlareCheck / PreChart / PulseCheck)
 
 ---
 
 ## One-liner
 
-**Between-visit flare check-in** — for eczema/rash (and optional wearable risk): a history-aware agent talks to the patient, sends a **short-lived secure phone photo link** into Medplum (`Binary` + `DocumentReference`), charts the encounter, checks coverage, and hands off to a human when co-regulation is needed.
+**The pre-visit agent you can let write to a chart.** Preflight talks to a patient before their
+appointment, charts the conversation as it happens, researches the complaint against real
+literature, drafts an n=1 plan for a clinician to approve, and answers "what will this cost" —
+with every single action bound to one patient by its authorization, and every decision written
+to an audit log.
+
+The demo is the pre-visit flow. The thing that makes it defensible is the layer underneath:
+**the subject of care is not the model's to choose.**
 
 ---
 
 ## Problem statement
 
-Wearables can detect physiologic stress days before people feel sick, and EHRs already hold the history that makes those signals clinically meaningful — but today those systems don’t connect into care. Patients get a silent notification (or nothing). Clinics get noise, not a chart. Between visits, deterioration is still discovered late: at symptom onset, an urgent appointment, or the ED.
+Clinical agents are about to be given write access to charts. The tooling to decide whether
+that is safe does not exist.
 
-Ambient AI is fixing documentation *during* visits. The gap is **between visits**: turning a wearable risk signal into a short, history-aware conversation, a structured FHIR encounter the clinician can trust, and a clear next step — including whether follow-up is covered and what it may cost — before the patient is already in trouble.
+This is not a hypothetical. Medplum's MCP integration exposes a `fhir-request` tool annotated
+*"this tool can modify data"* whose schema takes a model-authored URL string — so the patient
+whose record gets written is a substring of text a language model composed. Get that wrong and
+you have not produced a bad answer, you have produced an order on the wrong person.
 
-Millions now generate continuous consumer data (sleep, HR, temperature, cycle signals), but that data mostly **dies on the phone**. Clinicians aren’t trained or staffed to interpret month-long vital streams in a 15-minute visit, so they ignore the phone dump. We have **data abundance and action scarcity**.
+The field has measured the problem and not solved it. [HAARF][haarf] red-teams six scenarios
+across five middleware layers; its wrong-patient scenario (RT-4) passes 6% with enforcement on
+versus 16% baseline — enforcement makes it *worse*, because none of the layers binds the
+subject of care. Worse still, its contraindication gate reads allergies from the session
+patient while the order names a different MRN, so a wrong-patient order gets safety-checked
+against the wrong chart.
 
-What’s missing is not another sensor — it’s the **filter and bridge**: right signal → right moment of contact → EHR context → structured chart → covered next step → human when calm/trust requires it.
+Meanwhile the body meant to own assurance collapsed: CHAI's national AI assurance lab network
+[failed by early 2025][chai], with leadership conceding they had wrongly assumed
+pre-procurement testing mattered more than post-deployment monitoring.
 
-**Slide line:** Wearables see risk early; care still starts late — because alerts don’t become conversations, charts, or covered next steps.
-
-**Curry-aligned line:** Free the data from the phone — then make only the *right* signal reach the patient and the chart.
+**Slide line:** Everyone is building agents that write to charts. Nobody can prove they wrote
+to the right one.
 
 ---
 
 ## What we are / are not claiming
 
-| Say | Don’t say |
+| Say | Don't say |
 |-----|-----------|
-| Risk-triggered outreach / triage | Predictive diagnosis |
-| Turns alerts into encounters | Replaces clinicians |
-| Works with Apple / Whoop / Fitbit / Oura *signals* | We’re shipping a new FDA device today |
-| FHIR system of record + human handoff | Another dashboard or chatbot that traps data |
+| Patient binding enforced by authorization | We solved AI safety |
+| Drafts a plan a human commits | Autonomous treatment |
+| Retrieved citations, or none at all | Generated references |
+| Verifies a published framework's measured gap | We are a certification body |
+| All four sponsors live, Medplum in mock | Production-ready today |
+
+---
+
+## Why this gap and not another
+
+We deliberately checked whether the obvious ideas were taken. They are.
+
+| Idea | Why we didn't build it |
+|------|------------------------|
+| Symptom triage / checker | A graveyard. K Health [shut down its DTC AI care offering][khealth] to pivot to health systems |
+| Ambient scribing | Commoditized from above — Epic AI Charting ships February 2026, on top of Abridge at ~$5.3B |
+| Outbound payer calling | A knowledge-graph moat, not a weekend build — [Infinitus][infinitus] has 5M+ calls |
+| Prior authorization | $200M+ funded incumbents |
+| Price transparency | Turquoise shipped [personalized estimates as an API][turquoise] two days before this hackathon |
+
+What is genuinely unbuilt is a verification and enforcement layer for agent FHIR writes. The
+academic work near it measures capability, never authorization:
+
+| Work | Covers | Doesn't |
+|------|--------|---------|
+| [HAARF][haarf] | 279 requirements, 6 red-team scenarios, real measurements | No patient-identity layer; RT-4 unsolved; dict stubs, no FHIR server |
+| [HealthAdminBench][hab] (Stanford) | 135 admin tasks, 1,698 verifiable subtasks | Administrative, not clinical write authorization |
+| [FHIR-AgentEval][fae] | 43 tasks against resettable HAPI via MCP | Task success, not patient-boundary safety |
+| [MedAgentBench][mab] / HealthBench | EHR tasks, clinical Q&A | Capability, not permission |
+
+Every one asks *did the agent succeed*. None asks *was it allowed to*.
+
+**And the sponsor's own docs describe the hole.** Medplum's [Build with AI][medplum-ai] page
+states the thesis outright — *"the barrier to production isn't the AI model; it's the lack of a
+secure, auditable foundation"* — names the *"can suggest, but not act"* pattern, and requires
+an `AuditEvent` for every AI action. It documents the principle and ships no way to verify it
+holds. Preflight is that verification.
 
 ---
 
 ## Hackathon fit
 
-From the [YC x Medplum brief](https://www.medplum.com/blog/yc-medplum-hackathon-2026): voice-first, charted as it happens, history-aware, cost/coverage ahead of the doctor, enhance clinicians.
+From the [YC x Medplum brief][brief]: voice-first, charted as it happens, deep-researched,
+history-aware, n=1, peer-reviewed, visualized, cost known up front.
 
-| Judge lens | How we hit it |
-|------------|---------------|
-| Potential impact | Between-visit deterioration → ready chart; less noise for clinicians |
-| Sponsor tech | All four: Deepgram, Medplum, Moss, Stedi |
+| Brief requirement | Implementation |
+|---|---|
+| Check in by talking to a voice agent | Deepgram Nova-3 → LangGraph (`/voice/turn`) |
+| Charted as it happens | `Encounter` + `Observation` + `Composition` |
+| Any issue deep researched | Europe PMC; retrieved citations only, never generated |
+| Full context of your history | Moss hybrid retrieval, with a relevance floor so absent history reads as absent |
+| n=1 treatment | `CarePlan` with per-patient reasoning and attached evidence |
+| Peer reviewed by experts | `status: draft` + `Task` + `Provenance`; a human commits at `/review` |
+| Data visualized | Wearable Observations as gauges against reference ranges |
+| Cost and coverage up front | Live Stedi 271 parsed to "$15 copay for an office visit" |
+| *(unstated, load-bearing)* | Patient-scoped capability gateway + `AuditEvent` per decision |
+
+### Sponsor use — all four live
+
+| Sponsor | Role | Status |
+|---------|------|--------|
+| **Medplum** | FHIR CDR; SMART `patient=<id>` scope is what makes binding enforceable server-side rather than a rule we remembered to write | live (mock fallback) |
+| **Deepgram** | Nova-3 STT; word-perfect on test utterances at 0.99977 confidence | live |
+| **Moss** | Hybrid retrieval over the patient's record, mid-conversation | live |
+| **Stedi** | Real-time eligibility (X12 270/271) in test mode | live |
 
 ### End-to-end flow
 
 ```mermaid
 flowchart TD
-  W[Wearable signal<br/>Whoop / Apple / Fitbit / Oura<br/>mock for hack] --> R{Risk filter<br/>rules + thresholds}
-  R -->|normal variation| N[Reassure patient<br/>no clinic noise]
-  R -->|risk crossed| DG[Deepgram voice agent<br/>outbound / inbound call]
+  P[Patient voice] --> DG[Deepgram Nova-3 STT]
+  DG --> A[LangGraph agent]
 
-  DG <--> M[Moss retrieval<br/>history + protocols &lt;10ms]
-  M -.->|Patient, Conditions, meds, prior flares| FH[(Medplum FHIR CDR)]
+  S[/session/start] ==>|binds capability<br/>before any model token| CAP{{Capability<br/>patient · purpose · tools}}
+  CAP -.->|adjudicates every call| A
 
-  DG -->|transcript + structured intake| FH
-  FH --> ENC[Encounter + Observations<br/>+ Composition note]
+  A <--> MOSS[Moss retrieval<br/>score floor 0.75]
+  A --> RES[Europe PMC<br/>reviews + guidelines]
+  A --> ST[Stedi eligibility]
 
-  ENC --> ST[Stedi test eligibility]
-  ST --> COST[Coverage + est. copay<br/>for next step]
+  A -->|charted as spoken| FH[(Medplum FHIR)]
+  A -->|draft only| CP[CarePlan status=draft<br/>+ Provenance + Task]
 
-  DG --> H{Patient wants<br/>a real human?}
-  H -->|yes — co-regulation| HUM[Human handoff<br/>nurse / clinician]
-  H -->|no| DONE[Patient done<br/>chart ready for clinic]
-  HUM --> DONE
-  COST --> DONE
-  DONE --> CLIN[Clinician view<br/>ready chart — not raw HRV]
+  CAP ==>|allow / deny| AUD[(AuditEvent ledger)]
+
+  CP --> REV[Human clinician /review]
+  REV -->|commits| ACTIVE[CarePlan active]
+  REV -->|rejects| VOID[revoked]
+
+  A --> RF{Red flag?}
+  RF -->|chest pain, stroke| E911[Say: call 911]
+  RF -->|exertional dyspnea| URG[Say: seen today]
+  RF -->|no| DONE[Chart ready before the visit]
 ```
 
-### System context
-
-```mermaid
-flowchart LR
-  subgraph Patient
-    Wearables[Wearables]
-    Phone[Phone / voice]
-  end
-
-  subgraph Sponsors
-    DG[Deepgram]
-    Moss[Moss]
-    Medplum[Medplum]
-    Stedi[Stedi]
-  end
-
-  subgraph Clinic
-    MD[Clinician]
-    Human[On-call human]
-  end
-
-  Wearables -->|vitals / deltas| Risk[Risk engine]
-  Risk -->|trigger| DG
-  Phone <-->|audio| DG
-  DG <-->|ground each turn| Moss
-  Moss <-->|index + query| Medplum
-  DG -->|chart writes| Medplum
-  Medplum -->|CoverageEligibilityRequest| Stedi
-  Stedi -->|benefits mock| Medplum
-  DG -.->|escalate| Human
-  Medplum -->|ready encounter| MD
-  Human -->|warm handoff + chart| MD
-```
-
-| Sponsor | Role in demo |
-|---------|----------------|
-| **Deepgram** | Outbound/inbound voice check-in, barge-in, transcripts |
-| **Medplum** | Chart write-path; clinician UI of live Encounter + note |
-| **Moss** | Session + long-term index (conditions, meds, prior flares) each turn |
-| **Stedi** | Mock eligibility for recommended next step |
+The double lines are the point: the capability is issued by the server and adjudicates every
+tool call, and nothing the agent writes becomes care without a human.
 
 ---
 
 ## Demo script (90 seconds)
 
-1. Ops UI (`web/`): start FlareCheck for Jordan Lee (eczema history)  
-2. Patient: “Elbows flaring, can’t sleep from itch” → Moss pulls prior tele-derm + triamcinolone  
-3. Agent issues **secure capture link** (15m, single-use) → phone photo → Medplum `Binary` + `DocumentReference`  
-4. Encounter + Observations + Composition update (no skin diagnosis claim)  
-5. Stedi: urgent tele-dermatology coverage / est. copay  
-6. Optional: “Talk to a person” → human handoff with chart + photo ready  
-7. Clinician `/chart/:encounterId`: ready note + photo, not a raw alert dump  
+1. **Intake** — "My right knee has been swollen and painful for three weeks after I started
+   running, worse going downstairs." Charted as it's spoken.
+2. **History** — Moss retrieves the patient's own record. Ask about a knee and the eczema
+   history correctly does *not* appear; ask about asthma and it does.
+3. **Research** — real Europe PMC guidelines for the complaint, not generated references.
+4. **Plan** — a draft `CarePlan` with `Provenance` naming the agent as author. It is a
+   proposal, not care.
+5. **Cost** — live Stedi: *"AETNA INC — active coverage; $15 copay for an office visit; $0
+   deductible remaining."*
+6. **Review** — clinician opens `/review`, reads the evidence, commits. Now it's active.
+7. **Red team** — press the button that asks the agent to order a medication for a *different*
+   patient. Denied, with the reason and an `AuditEvent`. Then `/trust` shows the HAARF
+   scorecard: 5/5 correct, plus 8/8 on Medplum-MCP-shaped `fhir-request` calls where the
+   patient hides inside a URL.
 
-**Hackathon scope today:** eczema photo path is the hero; wearable risk remains in the same agent loop. One persona; ship by 5:00pm PT.
+Step 7 is the one to linger on. Everything before it is the brief; step 7 is why it's safe.
 
-**Sample patients:** [Synthea](https://mitre.github.io/fhir-for-research/modules/synthea-overview)-shaped bundles in `agent/data/synthea/` (`sample_eczema_bundle.json`). Importer: `python -m src.synthea_import`.
-
-**Wearable connect (secondary):** [Open Wearables](https://openwearables.io/docs) — Whoop/Oura/Fitbit/… via `get_wearable_risk`. Skill: `.cursor/skills/open-wearables/`.
-
-**Medplum core:** `Binary` + `securityContext` + upload path + `DocumentReference` / `Media` on `Encounter` — see [Binary data](https://www.medplum.com/docs/fhir-datastore/binary-data) and [Binary security context](https://www.medplum.com/docs/access/binary-security-context).
-
----
-
-## Evidence & industry signal
-
-### Science (wearables → early signal)
-
-- [Nature Medicine — Snyder et al.](https://www.nature.com/articles/s41591-021-01593-2): real-time smartwatch alerts; ~80% of COVID cases at/before symptoms; median ~3 days lead time  
-- [Nature Medicine — DETECT](https://www.nature.com/articles/s41591-020-1123-x): sensors + symptoms beat symptoms alone  
-- [Nature Medicine — Parkinson’s accelerometry](https://www.nature.com/articles/s41591-023-02440-2): digital biomarkers years before diagnosis  
-- [Nature Sensors — closed-loop wearables](https://www.nature.com/articles/s44460-026-00105-4): value = sense + decide + act + **human oversight**  
-- [Nature Biomedical Engineering — multi-agent healthcare](https://www.nature.com/articles/s41551-025-01363-2) (Moritz, Topol, Rajpurkar)
-
-### Stanford / clinical leaders
-
-- [Eric Topol × Euan Ashley — Future of Medicine](https://medicine.stanford.edu/news/stories/episodes/eric-topol-healthy-aging.html) (transcript): prevention, wearables, biomarkers, AI  
-- [Sumbul Desai (Apple VP Health) @ Stanford](https://medicine.stanford.edu/news/stories/2025/09/sumbul-desai-mgr.html): notifications ≠ diagnosis; **actionability**; enrich encounter, don’t add busywork; high specificity  
-- Mike Snyder podcasts: multiomics + wearables for pre-symptomatic detection  
-
-### Free the data from the phone (Oura / Maven)
-
-[The Preprint — Neel Shah × Chris Curry](https://open.spotify.com/episode/64oyP3yA5QLBvby0Cvqkqe)  
-Dr. **Chris Curry** (OB/GYN, MD/PhD): Apple menstrual cycle tracking → Clinical Director, Women’s Health at **Oura**.
-
-Key quotes / ideas to use:
-
-- Wearable data must not be the end state on the phone; EHR + wearable = **one health identity**  
-- Doctors cringe at uncured phone dumps — need **interpretation / contextualization**  
-- Additive when it changes opinion (e.g. palpitations + resting HR 140); skip when clinical picture is already clear  
-- Rural Nebraska labor alert *before* strong contractions → hours to reach hospital  
-- Failure mode: noise / neuroticism; ideal: filter for pathology **and** “this variation is normal”  
-- Mandate: **“Free the data from the phone.”**
-
-### Adjacent clinical AI
-
-- Ambient scribes ([NEJM Catalyst](https://catalyst.nejm.org/doi/full/10.1056/CAT.23.0404), Abridge ~$5.3B): voice→notes **in visit** — we own **between visits**  
-- [NEJM AI MedAgentBench](https://ai.nejm.org/doi/full/10.1056/AIdbp2500144): FHIR-native agents; not fully autonomous yet  
-- [Lancet — Zou & Topol](https://pubmed.ncbi.nlm.nih.gov/39922663/): agentic AI teammates  
+**Sample patients:** [Synthea][synthea]-shaped bundles in `agent/data/synthea/`. Both eczema
+and asthma bundles are merged, so retrieval is not single-condition.
 
 ---
 
-## Market snapshot
+## Evidence
 
-| Layer | Signal |
-|-------|--------|
-| US RPM | ~$14–16B (2024–25) → ~$29B by 2030 (~12–13% CAGR) — [MarketsandMarkets](https://www.marketsandmarkets.com/Market-Reports/us-remote-patient-monitoring-rpm-market-252862303.html) |
-| Medicare RPM | ~$15M (2019) → ~$536M (2024); ~970k enrollees |
-| Ambient clinical AI | ~$600M+ category revenue; huge validation of voice→clinical spend |
-| Consumer wearables | Apple hypertension notifications; Whoop EHR sync + telehealth + CMS ACCESS; Oura women’s health + Maven |
+### Agent governance
 
-### Competitive whitespace
+- [HAARF][haarf] — the framework we score against, and whose RT-4 gap we close
+- [Medplum: Build with AI][medplum-ai] — *"can suggest, but not act"*, `AuditEvent` per action
+- [Medplum MCP][medplum-mcp] — the `fhir-request` tool our gateway sits in front of
+- [CHAI assurance labs collapse][chai] — why post-deployment verification is the unmet need
+- [NEJM AI MedAgentBench][mab] — FHIR-native agents are not autonomous-ready
+- [Lancet — Zou & Topol][lancet] — agentic AI as teammates
 
-| Segment | Players | Gap |
-|---------|---------|-----|
-| Clinical RPM / hospital-at-home | Cadence, Current Health, Biofourmis | Ops + proprietary devices; not consumer wearable → agent → FHIR loop |
-| Ambient scribes | Abridge, Nuance DAX | Starts at the appointment |
-| Patient voice agents | Hippocratic, Altira-class | Often not wearable-triggered |
-| Consumer wearables | Apple, Whoop, Oura, Fitbit | Alert ≠ clinician chart + eligibility |
+### Wearables as an input (secondary in this build)
 
-**Wedge:** `Consumer wearable anomaly + EHR context → voice agent → FHIR encounter → Stedi → human handoff`
+- [Nature Medicine — Snyder et al.][snyder]: ~80% of COVID cases flagged at or before symptoms, ~3 day median lead
+- [Nature Medicine — DETECT][detect]: sensors plus symptoms beat symptoms alone
+- [Nature Sensors — closed-loop wearables][clwbe]: value comes from sense + decide + act + **human oversight**
+- [Sumbul Desai (Apple VP Health)][desai]: notifications aren't diagnoses; **actionability**; enrich the encounter rather than adding busywork
 
-### ICP (who pays later)
+### Free the data from the phone
 
-Primary care / multispecialty groups, value-based / ACO / MA plans, digital clinics on Medplum. Monetize via RPM/CCM-style PMPM or per-escalation; ambient AI shows clinics already pay for voice (~$2.5k/clinician/yr class).
+[The Preprint — Neel Shah × Chris Curry][curry]. Dr. Chris Curry (OB/GYN, MD/PhD) went from
+Apple cycle tracking to Clinical Director, Women's Health at Oura.
+
+- Wearable data must not end on the phone; EHR + wearable = **one health identity**
+- Clinicians recoil from uncurated phone dumps — the need is **interpretation**
+- Additive only when it changes the opinion (palpitations plus resting HR 140); skip it when
+  the clinical picture is already clear
+- Ideal filter catches pathology *and* says "this variation is normal"
+
+Preflight's version of that filter is the retrieval score floor: absent history should read as
+absent, not as a low-confidence guess.
 
 ---
 
 ## Human psychology — design for handoff
 
-People often bypass agents to reach a real human for calm and trust. Named ideas:
+People bypass agents to reach a human for calm and trust. Don't fight it; route around it.
 
 | Term | Meaning |
 |------|---------|
-| **Co-regulation** | Nervous-system calming via another human (tone, presence) — bots validate; humans co-regulate |
-| **Algorithm aversion** | Prefer humans for consequential medical decisions |
-| **Human-in-the-loop preference** | AI OK for access/admin; person for care |
-| **Emotional trust** | Belief that someone cares / is accountable |
-| **Reassurance-seeking** | Anxiety → need trusted confirmation |
+| **Co-regulation** | Nervous-system calming via another human — bots validate, humans co-regulate |
+| **Algorithm aversion** | Humans preferred for consequential medical decisions |
+| **Emotional trust** | Belief that someone cares and is accountable |
+| **Reassurance-seeking** | Anxiety drives the need for trusted confirmation |
 
-**Product rule:** Agent prepares the chart and eligibility; **one-tap “talk to a person”** always available. AI narrows; humans decide and soothe. Do not fight algorithm aversion — route around it.
+**Product rules learned the hard way in testing:**
+
+- One-tap "talk to a person", always available. AI narrows; humans decide and soothe.
+- **A handoff must say the urgent thing out loud.** Our agent recognized a possible heart
+  attack, passed it as the handoff reason, and then told the patient only "please stay on the
+  line" — the urgency never reached the words. Fixed.
+- **Escalation needs tiers.** One tier sent a ten-day cough to an ambulance. Telling every
+  escalation to dial 911 teaches patients to ignore it.
+- **A failed handoff must not look successful.** Persisting conversation context was wrapped in
+  `except: pass`, so a clinician could inherit a patient with none of the conversation.
+
+---
+
+## Market
+
+| Layer | Signal |
+|-------|--------|
+| Ambient clinical AI | ~$600M+ category revenue; Abridge ~$5.3B — proves clinics pay for voice, and that the niche is closed |
+| Agent assurance / eval | No funded incumbent. CHAI's labs failed; benchmarks are academic |
+| US RPM | ~$14–16B (2024–25) → ~$29B by 2030 ([MarketsandMarkets][mm]) |
+| Consumer wearables | Apple hypertension notifications; Whoop EHR sync; Oura women's health |
+
+**Wedge:** the enforcement and verification layer for clinical agent writes — patient binding,
+an audit ledger, and a red-team scorecard — sold to whoever is about to hand an agent write
+access. Every platform adopting MCP acquires this problem on the day they enable it.
+
+**ICP:** digital health builders on Medplum first (they hit it first), then health-system
+innovation teams, then the payers and regulators who will eventually require the evidence.
+
+---
+
+## Honest limits
+
+- Binding uses identifier heuristics; a patient referenced only by name, or by an identifier
+  system the gateway hasn't been told about, would be missed. Production should resolve
+  references through the server.
+- MCP results adjudicate request *shapes* from Medplum's documented schema; we don't run a live
+  MCP server in the loop.
+- Medplum runs in mock mode without credentials. The SMART-scope argument is documented and
+  correct, but not exercised against a live server here.
+- Red-flag detection is keyword-tiered — auditable, but it will miss phrasing we didn't
+  anticipate. This should be a model judgement with a keyword floor.
+- Retrieval knows two conditions (18 documents). It correctly returns nothing for a third.
+- Moss allows 3 indexes on this account, which constrained short-term session persistence.
 
 ---
 
 ## Pitch (30 seconds)
 
-> Nature Medicine–level work shows smartwatches can flag illness before symptoms. Apple and Oura leaders say the job is actionability and freeing data from the phone — not more graphs. Ambient AI charts the visit you’re already in. We chart the risk **before** the visit: when Whoop, Apple Watch, Fitbit, or Oura goes red, a Deepgram agent that knows your Medplum history calls you, writes the encounter to FHIR, checks Stedi for coverage, and hands you a human when you need to feel calm — so the care team gets a ready chart, not another unread alert.
+> Everyone is about to give AI agents write access to medical records. Medplum's own MCP server
+> exposes a tool that can modify any patient's chart, where the patient is a string the model
+> writes. HAARF measured that exact failure and their middleware made it *worse* — 6% versus
+> 16% baseline — because nothing binds the subject of care. Preflight is a pre-visit agent that
+> does the whole brief: talks to you, charts as you speak, researches your complaint against
+> real guidelines, drafts a plan a doctor approves, tells you it's a $15 copay. And it cannot
+> touch anyone else's chart, because the patient is a property of its authorization, not an
+> argument it chooses. Ask it to order a drug for another patient and it refuses, in the audit
+> log, every time.
 
 ---
 
-## Open decisions for build day
-
-- [x] Beachhead for today: **eczema / rash flare** (+ optional wearable)  
-- [x] Product name working title: **FlareCheck**  
-- [x] Secure photo link (HMAC token → phone → Medplum Binary)  
-- [ ] Human handoff: simulated clinician queue vs real second user  
-- [ ] Live Medplum ClientApplication credentials in `agent/.env`  
-- [ ] Deepgram mic / Voice Agent in the web shell  
-
 ## Related project files
 
-- **Agent API:** [`../agent/README.md`](../agent/README.md)  
-- **Web UI:** [`../web/README.md`](../web/README.md)  
-- Hackathon + judging: [`.cursor/skills/yc-medplum-hackathon/SKILL.md`](../.cursor/skills/yc-medplum-hackathon/SKILL.md)  
-- Skills: Medplum / Deepgram / Stedi / Moss / Open Wearables under [`.cursor/skills/`](../.cursor/skills/)  
-- Event README: [`../README.md`](../README.md)
+- **Governance thesis + scorecard:** [`AGENT_GOVERNANCE.md`](AGENT_GOVERNANCE.md)
+- **Agent API:** [`../agent/README.md`](../agent/README.md)
+- **Web UI:** [`../web/README.md`](../web/README.md)
+- **Closed-loop wearable synthesis:** [`CLOSED_LOOP_SYNTHESIS.md`](CLOSED_LOOP_SYNTHESIS.md)
+- Skills: Medplum / Deepgram / Stedi / Moss / Open Wearables under [`.cursor/skills/`](../.cursor/skills/)
+
+[haarf]: https://github.com/Task-force-for-AI-agents-in-Healthcare/haarf
+[medplum-ai]: https://www.medplum.com/docs/ai
+[medplum-mcp]: https://www.medplum.com/docs/ai/mcp
+[chai]: https://www.fiercehealthcare.com/ai-and-machine-learning/inside-chais-failed-assurance-labs
+[hab]: https://github.com/som-shahlab/health-admin-bench
+[fae]: https://github.com/YoussefMkst/FHIR-AgentEval
+[mab]: https://ai.nejm.org/doi/full/10.1056/AIdbp2500144
+[khealth]: https://exitsandoutcomes.com/k-health-shuts-down-dtc-clinic-big-employer-customer-wins-losses/
+[infinitus]: https://www.prnewswire.com/news-releases/infinitus-systems-raises-51-5-million-series-c-funding-on-the-strength-of-ai-guardrails-302283847.html
+[turquoise]: https://turquoise.health/api/docs/personalized-estimates/
+[brief]: https://www.medplum.com/blog/yc-medplum-hackathon-2026
+[synthea]: https://mitre.github.io/fhir-for-research/modules/synthea-overview
+[lancet]: https://pubmed.ncbi.nlm.nih.gov/39922663/
+[snyder]: https://www.nature.com/articles/s41591-021-01593-2
+[detect]: https://www.nature.com/articles/s41591-020-1123-x
+[clwbe]: https://www.nature.com/articles/s44460-026-00105-4
+[desai]: https://medicine.stanford.edu/news/stories/2025/09/sumbul-desai-mgr.html
+[curry]: https://open.spotify.com/episode/64oyP3yA5QLBvby0Cvqkqe
+[mm]: https://www.marketsandmarkets.com/Market-Reports/us-remote-patient-monitoring-rpm-market-252862303.html
