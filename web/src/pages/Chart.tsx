@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api, type ChartPayload } from '../api';
+import { API, api, type ChartPayload } from '../api';
 
 function patientName(patient: Record<string, unknown>): string {
   const names = (patient.name as { given?: string[]; family?: string }[]) || [];
@@ -89,19 +89,22 @@ export function Chart() {
             {(data.photos || []).length === 0 ? (
               <p className="lede">No photo attached yet — open the secure capture link on a phone.</p>
             ) : (
-              (data.photos || []).map((p, i) => (
-                <div key={i} className="stack">
-                  <span>{p.title || 'Clinical photo'}</span>
-                  <span className="mono">{p.url}</span>
-                  {p.url?.startsWith('http') ? (
-                    <div className="photo-frame">
-                      <img src={p.url} alt={p.title || 'Flare photo'} />
-                    </div>
-                  ) : (
-                    <p className="lede">Binary reference on chart: {p.url}</p>
-                  )}
-                </div>
-              ))
+              (data.photos || []).map((p, i) => {
+                const src = p.preview_url ? `${API}${p.preview_url}` : p.url;
+                return (
+                  <div key={i} className="stack">
+                    <span>{p.title || 'Clinical photo'}</span>
+                    <span className="mono">{p.url}</span>
+                    {src ? (
+                      <div className="photo-frame">
+                        <img src={src} alt={p.title || 'Flare photo'} loading="lazy" />
+                      </div>
+                    ) : (
+                      <p className="lede">Binary reference on chart: {p.url}</p>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
 

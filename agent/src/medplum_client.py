@@ -26,6 +26,28 @@ _MOCK_STORE: dict[str, list[dict[str, Any]]] = {
 }
 
 
+def _binary_id_from_url(url: str) -> str | None:
+    """`Binary/bin-123` or absolute `.../Binary/bin-123` → `bin-123`."""
+    if not url or "Binary/" not in url:
+        return None
+    tail = url.split("Binary/")[-1]
+    return tail.split("?")[0].split("/")[0] or None
+
+
+def _photo_entry(docref: dict[str, Any]) -> dict[str, Any]:
+    attachment = ((docref.get("content") or [{}])[0].get("attachment")) or {}
+    url = attachment.get("url") or ""
+    binary_id = _binary_id_from_url(url)
+    return {
+        "document_reference_id": docref.get("id"),
+        "title": attachment.get("title") or docref.get("description"),
+        "content_type": attachment.get("contentType"),
+        "url": url,
+        "binary_id": binary_id,
+        "preview_url": f"/binary/{binary_id}" if binary_id else None,
+    }
+
+
 class MedplumService:
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
@@ -111,6 +133,141 @@ class MedplumService:
         obs["id"] = f"obs-{uuid4().hex[:8]}"
         self._mock_store["Observation"].append(obs)
         return obs
+
+    def add_quantity_observation(
+        self,
+        patient_id: str,
+        encounter_id: str,
+        *,
+        value: float,
+        unit: str,
+        code: str,
+        display: str,
+        system: str = "http://loinc.org",
+        device_display: str | None = None,
+    ) -> dict[str, Any]:
+        """Coded vital from a wearable — LOINC where one exists, else local code."""
+        obs = {
+            "resourceType": "Observation",
+            "status": "final",
+            "category": [
+                {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                            "code": "vital-signs",
+                            "display": "Vital Signs",
+                        }
+                    ]
+                }
+            ],
+            "code": {"coding": [{"system": system, "code": code, "display": display}], "text": display},
+            "subject": {"reference": f"Patient/{patient_id}"},
+            "encounter": {"reference": f"Encounter/{encounter_id}"},
+            "effectiveDateTime": datetime.now(timezone.utc).isoformat(),
+            "valueQuantity": {
+                "value": value,
+                "unit": unit,
+                "system": "http://unitsofmeasure.org",
+                "code": unit,
+            },
+        }
+        if device_display:
+            obs["device"] = {"display": device_display}
+        if self._client:
+            return self._client.create_resource(obs)
+
+        obs["id"] = f"obs-{uuid4().hex[:8]}"
+        self._mock_store["Observation"].append(obs)
+        return obs
+
+    WEARABLE_VITALS: tuple[tuple[str, str, str, str, str], ...] = (
+        # (summary key, LOINC-or-local code, display, unit, code system)
+        ("resting_heart_rate_bpm", "40443-4", "Heart rate resting", "/min", "http://loinc.org"),
+        ("avg_hrv_sdnn_ms", "80404-7", "Heart rate variability (RMSSD)", "ms", "http://loinc.org"),
+        ("avg_spo2_percent", "59408-5", "Oxygen saturation by pulse oximetry", "%", "http://loinc.org"),
+        ("skin_temp_celsius", "8310-5", "Body temperature (skin)", "Cel", "http://loinc.org"),
+        (
+            "recovery_score",
+            "recovery-score",
+            "Wearable recovery score",
+            "%",
+            "https://flarecheck.dev/CodeSystem/wearable",
+        ),
+        ("duration_minutes", "93832-4", "Sleep duration", "min", "http://loinc.org"),
+        (
+            "efficiency_percent",
+            "sleep-efficiency",
+            "Sleep efficiency",
+            "%",
+            "https://flarecheck.dev/CodeSystem/wearable",
+        ),
+        (
+            "awake_minutes",
+            "awake-minutes",
+            "Time awake during sleep period",
+            "min",
+            "https://flarecheck.dev/CodeSystem/wearable",
+        ),
+    )
+
+    def write_wearable_snapshot(
+        self,
+        patient_id: str,
+        encounter_id: str,
+        snapshot: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Whoop/Open Wearables risk snapshot → coded Observations + chart note."""
+        recovery = snapshot.get("recovery") or {}
+        sleep = snapshot.get("sleep") or {}
+        merged = {**sleep, **recovery}
+        provider = snapshot.get("provider") or "wearable"
+        device = f"{provider} (via FlareCheck)"
+
+        written: list[str] = []
+        for key, code, display, unit, system in self.WEARABLE_VITALS:
+            value = merged.get(key)
+            if not isinstance(value, (int, float)):
+                continue
+            obs = self.add_quantity_observation(
+                patient_id,
+                encounter_id,
+                value=round(float(value), 2),
+                unit=unit,
+                code=code,
+                display=display,
+                system=system,
+                device_display=device,
+            )
+            written.append(str(obs.get("id")))
+
+        comp = self.write_composition(
+            patient_id,
+            encounter_id,
+            f"Wearable check-in ({provider})",
+            snapshot.get("context") or "Wearable snapshot attached.",
+            extra_sections=[
+                {
+                    "title": "Wearable signals",
+                    "text": {
+                        "status": "generated",
+                        "div": (
+                            f"<div>Risk level: {snapshot.get('level')} "
+                            f"(score {snapshot.get('score')}). "
+                            + "; ".join(snapshot.get("reasons") or ["within baseline"])
+                            + " — triage signal only, not a diagnosis.</div>"
+                        ),
+                    },
+                }
+            ],
+        )
+        return {
+            "observation_ids": written,
+            "composition_id": comp.get("id"),
+            "provider": provider,
+            "level": snapshot.get("level"),
+            "mode": self.mode,
+        }
 
     def write_composition(
         self,
@@ -245,15 +402,57 @@ class MedplumService:
             if b.get("id") == binary_id:
                 b["data_len"] = len(content)
                 b["contentType"] = content_type
-                return b
+                b["_bytes"] = content
+                return {k: v for k, v in b.items() if k != "_bytes"}
         binary = {
             "resourceType": "Binary",
             "id": binary_id,
             "contentType": content_type,
             "data_len": len(content),
+            "_bytes": content,
         }
         self._mock_store["Binary"].append(binary)
-        return binary
+        return {k: v for k, v in binary.items() if k != "_bytes"}
+
+    def read_binary_bytes(self, binary_id: str) -> tuple[bytes, str]:
+        """Fetch photo bytes for clinician preview (server-side credentials only)."""
+        if self._client:
+            # Prefer short-lived presigned download URL, else raw Binary read
+            try:
+                result = self._client.execute_operation(
+                    "Binary", "presigned-url", resource_id=binary_id, method="GET"
+                )
+                url = ""
+                if isinstance(result, dict):
+                    url = str(result.get("url") or "")
+                    if not url:
+                        for p in result.get("parameter") or []:
+                            if p.get("name") == "url":
+                                url = str(p.get("valueString") or p.get("valueUri") or "")
+                if url.startswith("http"):
+                    r = httpx.get(url, timeout=30.0)
+                    r.raise_for_status()
+                    return r.content, r.headers.get(
+                        "content-type", "application/octet-stream"
+                    )
+            except Exception:
+                pass
+            try:
+                meta = self._client.read_resource("Binary", binary_id)
+                content_type = str(meta.get("contentType") or "application/octet-stream")
+                raw = self._client.download_binary(binary_id)
+                data = raw if isinstance(raw, bytes) else bytes(raw)
+                return data, content_type
+            except Exception as exc:
+                raise LookupError(f"Binary/{binary_id} not readable: {exc}") from exc
+
+        for b in self._mock_store["Binary"]:
+            if b.get("id") == binary_id:
+                data = b.get("_bytes")
+                if not data:
+                    raise LookupError(f"Binary/{binary_id} has no bytes yet")
+                return bytes(data), str(b.get("contentType") or "image/jpeg")
+        raise LookupError(f"Binary/{binary_id} not found")
 
     def finalize_flare_photo(
         self,
@@ -403,12 +602,15 @@ class MedplumService:
                 for c in d.get("content") or []:
                     att = c.get("attachment") or {}
                     url = att.get("url") or ""
+                    binary_id = _binary_id_from_url(url)
                     photos.append(
                         {
                             "document_reference_id": d.get("id"),
                             "title": att.get("title") or d.get("description"),
                             "content_type": att.get("contentType"),
                             "url": url,
+                            "binary_id": binary_id,
+                            "preview_url": f"/binary/{binary_id}" if binary_id else None,
                         }
                     )
             return {
@@ -459,14 +661,7 @@ class MedplumService:
                 if (m.get("encounter") or {}).get("reference") == f"Encounter/{encounter_id}"
             ],
             "photos": [
-                {
-                    "document_reference_id": d.get("id"),
-                    "title": ((d.get("content") or [{}])[0].get("attachment") or {}).get("title"),
-                    "content_type": ((d.get("content") or [{}])[0].get("attachment") or {}).get(
-                        "contentType"
-                    ),
-                    "url": ((d.get("content") or [{}])[0].get("attachment") or {}).get("url"),
-                }
+                _photo_entry(d)
                 for d in self._mock_store["DocumentReference"]
                 if any(
                     (e.get("reference") == f"Encounter/{encounter_id}")

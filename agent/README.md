@@ -71,11 +71,33 @@ python scripts/smoke_flarecheck.py
 | GET | `/capture/{token}` | Capture page metadata |
 | POST | `/capture/{token}/upload` | Photo → Medplum Binary + DocumentReference |
 | GET | `/chart/{encounterId}` | Clinician BFF |
+| GET | `/binary/{binaryId}` | Stream photo bytes to the chart (creds stay server-side) |
+| GET | `/wearables/whoop/status` | Whoop app configured / strap connected |
+| GET | `/wearables/whoop/authorize` | Start Whoop OAuth (returns URL to open) |
+| GET | `/wearables/whoop/callback` | Whoop redirect → token exchange → back to app |
+| GET | `/wearables/whoop/summaries` | Latest recovery + sleep (normalized and raw) |
+| GET | `/wearables/risk` | Triage level from the connected strap, else mock |
+| POST | `/wearables/to-chart` | Wearable snapshot → coded FHIR Observations |
+
+## Connect a real Whoop
+
+1. Sign in at [developer-dashboard.whoop.com](https://developer-dashboard.whoop.com/) with your Whoop account (needs an active membership), create a Team, then an App.
+2. Scopes: `offline read:recovery read:sleep read:cycles read:workout read:body_measurement read:profile`.
+3. Redirect URI must be exactly `http://localhost:8080/wearables/whoop/callback`.
+4. Put `WHOOP_CLIENT_ID` / `WHOOP_CLIENT_SECRET` in `.env` and restart the API.
+5. Click **Connect my Whoop** on the web app, authorize, and you land back with `?whoop=connected`.
+6. **Pull signals into chart** writes resting HR, HRV, SpO2, skin temp, recovery, sleep duration/efficiency/awake time as coded `Observation`s on the encounter.
+
+Tokens are stored in `agent/.whoop_tokens.json` (gitignored, `0600`) and auto-refreshed via the `offline` scope. Without credentials the same routes return mock summaries, so the demo never hard-fails.
+
+Closed-loop framing and the eczema signal rationale: [`docs/CLOSED_LOOP_SYNTHESIS.md`](../docs/CLOSED_LOOP_SYNTHESIS.md).
 
 ## Progress
 
 - [x] LangGraph + Moss + Medplum + Stedi + handoff
 - [x] Open Wearables risk tool
+- [x] Whoop API v2 OAuth + eczema-aware risk rules + FHIR Observation write-through
+- [x] Photo preview streamed to clinician chart via `/binary/{id}`
 - [x] Synthea eczema bundle + importer
 - [x] Secure capture tokens + Medplum Binary/DocumentReference path
 - [x] FastAPI BFF + web capture/chart UI

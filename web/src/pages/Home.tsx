@@ -17,12 +17,46 @@ export function Home() {
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState('');
   const [threadId, setThreadId] = useState(() => crypto.randomUUID());
+  const [whoop, setWhoop] = useState<{ configured: boolean; connected: boolean } | null>(null);
+  const [wearableNote, setWearableNote] = useState('');
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
 
   useEffect(() => {
     api.health().then(setHealth).catch(() => setHealth({ ok: false }));
+    api.whoopStatus().then(setWhoop).catch(() => setWhoop(null));
+    const result = new URLSearchParams(window.location.search).get('whoop');
+    if (result === 'connected') setWearableNote('Whoop connected — pulling your latest recovery and sleep.');
+    if (result === 'error') setError('Whoop authorization failed. Check the app credentials and retry.');
   }, []);
+
+  async function connectWhoop() {
+    setError('');
+    try {
+      const { authorization_url } = await api.whoopAuthorize();
+      window.location.href = authorization_url;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function pullWearable() {
+    setBusy(true);
+    setError('');
+    try {
+      const session = await ensureSession();
+      const out = await api.wearablesToChart(session.patient_id, session.encounter_id);
+      setEncounterId(out.encounter_id);
+      setWearableNote(
+        `${out.snapshot.provider} · risk ${out.snapshot.level} · ${out.observation_ids.length} FHIR Observations written` +
+          (out.snapshot.reasons.length ? ` — ${out.snapshot.reasons.join('; ')}` : ''),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function ensureSession() {
     if (patientId && encounterId) {
@@ -140,6 +174,22 @@ export function Home() {
             </Link>
           ) : null}
         </div>
+
+        <div className="row">
+          <span className="eyebrow">Wearable loop</span>
+          {whoop?.connected ? (
+            <span className="mono">whoop=connected</span>
+          ) : (
+            <button type="button" className="ghost" onClick={connectWhoop} disabled={!whoop?.configured}>
+              {whoop?.configured ? 'Connect my Whoop' : 'Whoop app credentials needed'}
+            </button>
+          )}
+          <button type="button" className="ghost" onClick={pullWearable} disabled={busy}>
+            Pull signals into chart
+          </button>
+        </div>
+
+        {wearableNote ? <p className="lede">{wearableNote}</p> : null}
 
         {error ? <p className="warn">{error}</p> : null}
 

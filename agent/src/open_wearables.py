@@ -12,6 +12,7 @@ from typing import Any
 import httpx
 
 from .config import Settings, get_settings
+from .whoop_client import WhoopClient
 
 # Lowercase provider path names per Open Wearables docs
 PROVIDERS = (
@@ -125,6 +126,9 @@ class OpenWearablesService:
         hrv = recovery.get("avg_hrv_sdnn_ms") or sleep.get("avg_hrv_sdnn_ms")
         rec = recovery.get("recovery_score")
         sleep_min = sleep.get("duration_minutes")
+        skin_temp = recovery.get("skin_temp_celsius")
+        efficiency = sleep.get("efficiency_percent")
+        awake_min = sleep.get("awake_minutes")
         provider = (recovery.get("source") or sleep.get("source") or {}).get("provider") or "unknown"
 
         if isinstance(rhr, (int, float)) and rhr >= 85:
@@ -132,13 +136,23 @@ class OpenWearablesService:
             reasons.append(f"elevated resting HR ({rhr} bpm)")
         if isinstance(hrv, (int, float)) and hrv < 35:
             score += 2
-            reasons.append(f"low HRV ({hrv})")
+            reasons.append(f"low HRV ({round(hrv, 1)} ms)")
         if isinstance(rec, (int, float)) and rec < 40:
             score += 2
             reasons.append(f"low recovery score ({rec})")
         if isinstance(sleep_min, (int, float)) and sleep_min < 360:
             score += 1
             reasons.append(f"short sleep ({sleep_min} min)")
+        # Eczema-specific: nocturnal itch shows up as fragmented sleep + warmer skin
+        if isinstance(efficiency, (int, float)) and efficiency < 85:
+            score += 1
+            reasons.append(f"fragmented sleep (efficiency {round(efficiency, 1)}%)")
+        if isinstance(awake_min, (int, float)) and awake_min >= 60:
+            score += 1
+            reasons.append(f"{awake_min} min awake overnight (possible nocturnal itch)")
+        if isinstance(skin_temp, (int, float)) and skin_temp >= 34.5:
+            score += 1
+            reasons.append(f"elevated skin temperature ({round(skin_temp, 1)} °C)")
 
         level = "high" if score >= 4 else "moderate" if score >= 2 else "low"
         triggered = level in {"moderate", "high"}
@@ -160,6 +174,18 @@ class OpenWearablesService:
 
     async def risk_snapshot(self, user_id: str | None = None) -> dict[str, Any]:
         uid = user_id or self.settings.open_wearables_user_id or "mock-user"
+
+        # A real connected Whoop strap wins over Open Wearables / mock summaries
+        whoop = WhoopClient(self.settings)
+        if whoop.connected:
+            summaries = await whoop.summaries()
+            out = self.evaluate_risk(summaries["recovery"], summaries["sleep"])
+            out["user_id"] = uid
+            out["mode"] = "live-whoop"
+            out["source"] = "whoop-api-v2"
+            out["as_of"] = datetime.now(timezone.utc).isoformat()
+            return out
+
         recovery = await self.recovery_summary(uid)
         sleep = await self.sleep_summary(uid)
         # Normalize list envelopes if API wraps data

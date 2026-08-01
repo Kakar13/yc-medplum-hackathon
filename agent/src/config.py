@@ -33,6 +33,16 @@ class Settings(BaseSettings):
     open_wearables_api_key: str = ""
     open_wearables_user_id: str = ""
 
+    # Direct Whoop API v2 (real strap, no Open Wearables instance needed)
+    # App: https://developer-dashboard.whoop.com/
+    whoop_client_id: str = ""
+    whoop_client_secret: str = ""
+    whoop_redirect_uri: str = "http://localhost:8080/wearables/whoop/callback"
+    whoop_scope: str = (
+        "offline read:recovery read:sleep read:cycles read:workout "
+        "read:body_measurement read:profile"
+    )
+
     # Secure photo capture (FlareCheck) — public URL of the web app
     public_app_url: str = "http://localhost:5173"
     public_api_url: str = "http://localhost:8080"

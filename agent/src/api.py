@@ -5,8 +5,9 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from .capture_links import get_capture_store
@@ -16,6 +17,7 @@ from .medplum_client import MedplumService
 from .open_wearables import OpenWearablesService
 from .stedi_client import StediService
 from .tools import get_session
+from .whoop_client import WhoopClient, WhoopNotConnected
 
 app = FastAPI(title="FlareCheck Agent", version="0.2.0")
 
@@ -80,6 +82,8 @@ async def health():
         "deepgram": bool(s.deepgram_api_key),
         "stedi": bool(s.stedi_api_key),
         "open_wearables": bool(s.open_wearables_api_key),
+        "whoop_configured": bool(s.whoop_client_id and s.whoop_client_secret),
+        "whoop_connected": WhoopClient(s).connected,
         "public_app_url": s.public_app_url,
     }
 
@@ -117,6 +121,78 @@ async def wearables_authorize(
     provider: str, user_id: str, redirect_uri: str = "http://localhost:3000/connected"
 ):
     return await OpenWearablesService().authorize_url(provider, user_id, redirect_uri)
+
+
+@app.get("/wearables/whoop/status")
+async def whoop_status():
+    return WhoopClient().status()
+
+
+@app.get("/wearables/whoop/authorize")
+async def whoop_authorize():
+    """Start real Whoop OAuth — returns the URL the patient opens once."""
+    try:
+        return WhoopClient().authorize_url()
+    except WhoopNotConnected as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/wearables/whoop/callback")
+async def whoop_callback(code: str | None = None, state: str | None = None, error: str | None = None):
+    """Whoop redirects here with ?code — exchange for tokens, then back to the app."""
+    s = get_settings()
+    if error:
+        return RedirectResponse(f"{s.public_app_url}/?whoop=error&reason={error}")
+    if not code:
+        raise HTTPException(400, "Missing authorization code")
+    try:
+        await WhoopClient().exchange_code(code)
+    except Exception as exc:  # noqa: BLE001 - show failure in the UI, not a stack trace
+        return RedirectResponse(f"{s.public_app_url}/?whoop=error&reason={type(exc).__name__}")
+    return RedirectResponse(f"{s.public_app_url}/?whoop=connected")
+
+
+@app.post("/wearables/whoop/disconnect")
+async def whoop_disconnect():
+    WhoopClient().disconnect()
+    return {"ok": True, "connected": False}
+
+
+@app.get("/wearables/whoop/summaries")
+async def whoop_summaries():
+    """Raw + normalized latest recovery / sleep from the connected strap."""
+    client = WhoopClient()
+    if not client.connected:
+        raise HTTPException(409, "Whoop not connected — call /wearables/whoop/authorize first")
+    try:
+        return await client.summaries()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"Whoop API error: {exc}") from exc
+
+
+@app.post("/wearables/to-chart")
+async def wearables_to_chart(body: dict[str, Any] | None = None):
+    """Wearable snapshot → coded FHIR Observations on the encounter (closed-loop sensing)."""
+    body = body or {}
+    medplum = _medplum()
+    session = get_session()
+    patient_id = body.get("patient_id") or session.get("patient_id")
+    encounter_id = body.get("encounter_id") or session.get("encounter_id")
+    if not patient_id or not encounter_id:
+        patient = medplum.ensure_demo_patient()
+        enc = medplum.create_encounter(patient["id"], "Wearable-triggered flare check-in")
+        patient_id, encounter_id = patient["id"], enc["id"]
+        session["patient_id"], session["encounter_id"] = patient_id, encounter_id
+
+    snapshot = await OpenWearablesService().risk_snapshot(body.get("user_id"))
+    written = medplum.write_wearable_snapshot(patient_id, encounter_id, snapshot)
+    return {
+        "ok": True,
+        "patient_id": patient_id,
+        "encounter_id": encounter_id,
+        "snapshot": snapshot,
+        **written,
+    }
 
 
 @app.post("/turn", response_model=TurnResponse)
@@ -324,6 +400,23 @@ async def chart(encounter_id: str):
         "If patient requested a human, continue from this chart — do not restart intake."
     )
     return data
+
+
+@app.get("/binary/{binary_id}")
+async def binary_preview(binary_id: str):
+    """Stream clinical photo bytes to the clinician UI — Medplum creds stay server-side."""
+    medplum = _medplum()
+    try:
+        content, content_type = medplum.read_binary_bytes(binary_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - surface upstream failure as 502
+        raise HTTPException(502, f"Binary read failed: {exc}") from exc
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Cache-Control": "private, max-age=60"},
+    )
 
 
 @app.get("/session")

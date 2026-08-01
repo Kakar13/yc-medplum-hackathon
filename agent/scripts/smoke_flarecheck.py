@@ -128,14 +128,27 @@ def main() -> None:
     up.raise_for_status()
 
     chart = c.get(f"/chart/{session['encounter_id']}").json()
+    photos = chart.get("photos") or []
     print(
         "chart photos",
-        len(chart.get("photos") or []),
+        len(photos),
         "compositions",
         len(chart.get("compositions") or []),
         "mode",
         chart.get("mode"),
     )
+
+    # Clinician must actually SEE the flare photo (BFF streams Binary bytes)
+    preview = next((p.get("preview_url") for p in photos if p.get("preview_url")), None)
+    if not preview:
+        raise SystemExit("FAIL no preview_url on chart photo")
+    img = c.get(preview)
+    print("preview", preview, img.status_code, img.headers.get("content-type"), len(img.content))
+    if img.status_code != 200 or not img.content:
+        raise SystemExit(f"FAIL preview fetch {img.status_code}")
+    if img.content[:2] != b"\xff\xd8":
+        raise SystemExit("FAIL preview bytes are not the uploaded JPEG")
+
     print("OK FlareCheck smoke passed")
 
 

@@ -33,7 +33,14 @@ export type ChartPayload = {
   patient: Record<string, unknown>;
   observations: Record<string, unknown>[];
   compositions: Record<string, unknown>[];
-  photos: { document_reference_id?: string; title?: string; url?: string; content_type?: string }[];
+  photos: {
+    document_reference_id?: string;
+    title?: string;
+    url?: string;
+    content_type?: string;
+    binary_id?: string | null;
+    preview_url?: string | null;
+  }[];
   eligibility?: string;
   handoff_hint?: string;
 };
@@ -86,6 +93,39 @@ export const api = {
     }>;
   },
   chart: (encounterId: string) => json<ChartPayload>(`/chart/${encounterId}`),
+  whoopStatus: () =>
+    json<{
+      configured: boolean;
+      connected: boolean;
+      scope?: string;
+      connected_at?: string;
+      user?: Record<string, unknown> | null;
+      redirect_uri?: string;
+    }>('/wearables/whoop/status'),
+  whoopAuthorize: () => json<{ authorization_url: string; state: string }>('/wearables/whoop/authorize'),
+  whoopDisconnect: () => json<{ ok: boolean }>('/wearables/whoop/disconnect', { method: 'POST' }),
+  wearableRisk: () =>
+    json<{
+      level: string;
+      score: number;
+      reasons: string[];
+      provider: string;
+      context: string;
+      mode: string;
+    }>('/wearables/risk'),
+  wearablesToChart: (patientId?: string, encounterId?: string) =>
+    json<{
+      ok: boolean;
+      patient_id: string;
+      encounter_id: string;
+      observation_ids: string[];
+      level?: string;
+      snapshot: { level: string; reasons: string[]; provider: string; mode: string };
+    }>('/wearables/to-chart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patient_id: patientId, encounter_id: encounterId }),
+    }),
   voiceTurn: async (blob: Blob, threadId?: string) => {
     const form = new FormData();
     form.append('file', blob, 'mic.webm');

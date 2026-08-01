@@ -57,22 +57,67 @@ const encounter = await medplum.createResource<Encounter>({
 
 Client credentials: [Auth docs](https://www.medplum.com/docs/auth/client-credentials) · `POST /oauth2/token` or `startClientLogin`.
 
-## Core packages (monorepo)
+## Local clone (hackathon workspace)
 
-From [medplum/medplum](https://github.com/medplum/medplum):
+Shallow clone lives at `infra/medplum/` (gitignored, ~317MB). Do **not** commit it.
 
+```bash
+# if missing:
+git clone --depth 1 https://github.com/medplum/medplum.git infra/medplum
+```
+
+For FlareCheck today: prefer **hosted** `api.medplum.com` + ClientApplication. Full local stack needs Postgres+Redis (`docker-compose.yml`), Node 22/24, `npm ci` + build — heavy for demo day.
+
+## Product surface (monorepo categories)
+
+From [medplum/medplum](https://github.com/medplum/medplum) `packages/` + `examples/`:
+
+### Platform core (what FlareCheck already uses via API)
 | Package | Role |
 |---------|------|
-| `@medplum/core` | `MedplumClient`, FHIR helpers |
-| `@medplum/fhirtypes` | TypeScript FHIR types |
-| `@medplum/react` | Healthcare React components |
-| `@medplum/react-hooks` | React hooks |
-| `packages/server` | Backend API |
-| `packages/app` | Medplum web app |
-| `packages/docs` | Docs source (Markdown) |
-| `examples/` | Sample apps |
+| `server` | FHIR CDR + Auth + bots runtime |
+| `app` | Hosted admin/provider UI at app.medplum.com |
+| `core` | `@medplum/core` — `MedplumClient`, helpers |
+| `fhirtypes` | TypeScript FHIR types |
+| `fhir-router` | FHIR URL routing |
+| `mock` | Mock client for tests |
+| `cli` / `create-medplum` | Project scaffolding & deploy |
+| `definitions` | Terminology / data defs |
+| `docs` | Docs source (Markdown) |
 
-Stack: TypeScript, PostgreSQL, Redis, Express, React. Local setup: [contributing / local-dev-setup](https://www.medplum.com/docs/contributing/local-dev-setup).
+### App building
+| Package | Role |
+|---------|------|
+| `react` / `react-hooks` | Chart UI components + hooks |
+| `storybook` | Component gallery |
+| `graphiql` | GraphQL explorer |
+| `bot-layer` | AWS Lambda layer for Bots |
+
+### Interop / clinical network
+| Package | Role |
+|---------|------|
+| `hl7` | HL7v2 client/server |
+| `ccda` | C-CDA |
+| `agent` | On-prem agent (site connectivity) |
+| `health-gorilla-*` | Lab ordering (Health Gorilla) |
+| `dosespot-*` / `scriptsure-react` | eRx |
+| `cdk` | AWS self-host infra |
+
+### Example apps most relevant to FlareCheck
+| Example | Why it matters |
+|---------|----------------|
+| `medplum-provider` | Charting, visits, tasks, GraphQL chart |
+| `medplum-eligibility-demo` | Coverage + eligibility request/response (+ bot) |
+| `medplum-patient-intake-demo` | Intake → Questionnaire/Patient |
+| `medplum-hello-world` | Minimal Vite + MedplumClient |
+| `medplum-demo-bots` | Bot patterns |
+| `medplum-task-demo` | Human handoff Tasks |
+| `medplum-websocket-subscriptions-demo` | Live chart updates |
+| `foomedical` | Full patient-facing reference |
+
+Also: SMART-on-FHIR, Photon pharmacy, eFax, FHIRcast, multilingual, MSO, FSH profiles, Postman, local k8s.
+
+Stack: TypeScript, PostgreSQL, Redis, Express, React. Local setup: [local-dev-setup](https://www.medplum.com/docs/contributing/local-dev-setup).
 
 ## FHIR patterns for this hackathon
 
