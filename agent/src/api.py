@@ -475,6 +475,7 @@ async def capability():
         "active": cap.public() if cap else None,
         "enforcing": gateway.enforcing,
         "stats": gateway.stats(),
+        "identity": get_session().get("identity"),
         "principle": (
             "The subject of care is a property of authorization, never a tool argument."
         ),

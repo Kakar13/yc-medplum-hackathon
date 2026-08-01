@@ -77,6 +77,16 @@ export type Proposal = {
   awaiting_review?: boolean;
 };
 
+export type IdentityState = {
+  verified: boolean;
+  /** Set when a red flag ended the check early — the reason it was never completed. */
+  bypassed?: string;
+  identifiers_checked: number;
+  name_match?: boolean;
+  dob_match?: boolean;
+  at: number;
+};
+
 export type Capability = {
   token: string;
   patient_id: string;
@@ -213,6 +223,7 @@ export const api = {
       active: Capability | null;
       enforcing: boolean;
       stats: Record<string, number | boolean>;
+      identity: IdentityState | null;
       principle: string;
     }>('/capability'),
   audit: (limit = 100) =>

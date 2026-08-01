@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, type AuditEntry, type Capability, type Scorecard } from '../api';
+import {
+  api,
+  type AuditEntry,
+  type Capability,
+  type IdentityState,
+  type Scorecard,
+} from '../api';
 
 export function Trust() {
   const [cap, setCap] = useState<Capability | null>(null);
+  const [identity, setIdentity] = useState<IdentityState | null>(null);
   const [stats, setStats] = useState<Record<string, number | boolean>>({});
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [score, setScore] = useState<Scorecard | null>(null);
@@ -13,6 +20,7 @@ export function Trust() {
     try {
       const [c, a] = await Promise.all([api.capability(), api.audit(50)]);
       setCap(c.active);
+      setIdentity(c.identity ?? null);
       setStats(a.stats);
       setEntries(a.entries);
     } catch (e) {
@@ -71,6 +79,26 @@ export function Trust() {
               <div>
                 <dt>Expires in</dt>
                 <dd>{cap.expires_in_seconds}s</dd>
+              </div>
+              <div>
+                <dt>Identity</dt>
+                <dd>
+                  {identity?.bypassed ? (
+                    <>
+                      <span className="badge deny">bypassed — {identity.bypassed}</span>{' '}
+                      <span className="sub">help takes priority over paperwork</span>
+                    </>
+                  ) : identity?.verified ? (
+                    <>
+                      <span className="badge allow">verified</span>{' '}
+                      <span className="sub">
+                        {identity.identifiers_checked} identifiers matched the record
+                      </span>
+                    </>
+                  ) : (
+                    <span className="badge draft">not yet checked</span>
+                  )}
+                </dd>
               </div>
               <div>
                 <dt>Granted tools</dt>

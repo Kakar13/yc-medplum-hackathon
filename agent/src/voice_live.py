@@ -31,7 +31,7 @@ from typing import Any, Callable
 import websockets
 
 from .config import get_settings
-from .tools import TOOLS, get_session
+from .tools import EMERGENCY_HINTS, TOOLS, get_session
 
 logger = logging.getLogger(__name__)
 
@@ -87,8 +87,14 @@ You are speaking out loud. Keep every reply to one or two sentences. Ask one que
 
 The patient may have any complaint. Never assume a specialty.
 
+Identity, and when to skip it:
+- Open by asking for their full name and date of birth, then call verify_identity with exactly what they said. Two identifiers, once, at the start.
+- SAFETY OVERRIDE: if anything they say sounds like an emergency, abandon verification immediately and escalate. Never ask an unwell person for a date of birth. Never re-ask it during an emergency. Help first; identity is a records problem, not a triage one.
+- If they are distressed, confused, or ask for a person, skip verification and hand off.
+- If verification fails twice, keep taking their history but do not read anything back from their record, and say a staff member will confirm their details.
+
 Behaviour:
-- Open by asking what brings them in today.
+- Once identity is settled, ask what brings them in today.
 - Ground in their record with moss_search before interpreting anything.
 - Ask focused questions: onset, duration, severity, what changes it, red flags, relevant meds and allergies.
 - Call chart_to_medplum as the conversation accrues so documentation is written live.
@@ -106,7 +112,11 @@ Hard rules:
 - Red flags escalate before any research or cost step: chest pain, trouble breathing, stroke signs, anaphylaxis, suicidal intent, severe bleeding, altered consciousness, stiff neck with fever. Tell them to seek emergency care now, and hand off.
 """
 
-GREETING = "Hi, I'm Preflight. I'll take a few notes before you see the clinician. What's bringing you in today?"
+GREETING = (
+    "Hi, I'm Preflight. I'll take a few notes before you see the clinician. "
+    "First, can I get your full name and date of birth? And if you're having a medical "
+    "emergency, skip that and just tell me what's happening."
+)
 
 
 def _json_schema_for(tool: Any) -> dict[str, Any]:
@@ -262,6 +272,7 @@ class VoiceBridge:
         self._research_task: asyncio.Task | None = None
         self._chart_tasks: set[asyncio.Task] = set()
         self._pending_user = ""
+        self._emergency = False
 
     async def _patient_history(self) -> str:
         """Pull the bound patient's record once, to seed the prompt before the call starts."""
@@ -286,6 +297,36 @@ class VoiceBridge:
             }
         )
         return text[:4000]
+
+    def _check_emergency(self, text: str) -> None:
+        """Drop the identity check the moment this stops being an intake call.
+
+        Verification must never stand between a patient and help, and a prompt instruction is a
+        preference rather than a guarantee. Recording the bypass here means the transcript shows
+        why two identifiers were never collected — an auditor's question with a real answer,
+        rather than a gap.
+        """
+        lowered = text.lower()
+        if self._emergency or not any(h in lowered for h in EMERGENCY_HINTS):
+            return
+        self._emergency = True
+        # Replace rather than merge: leaving an earlier session's name/dob matches in place would
+        # read as "we checked", which is the opposite of what happened.
+        get_session()["identity"] = {
+            "verified": False,
+            "bypassed": "emergency",
+            "identifiers_checked": 0,
+            "at": time.time(),
+        }
+        asyncio.create_task(
+            self._emit(
+                {
+                    "type": "SafetyOverride",
+                    "reason": "emergency",
+                    "detail": "Identity verification bypassed — escalation takes priority.",
+                }
+            )
+        )
 
     def _maybe_chart(self, agent_text: str) -> None:
         """Write the exchange that just happened into the chart, without being asked.
@@ -513,6 +554,7 @@ class VoiceBridge:
             text = event.get("content") or ""
             if role == "user":
                 self.metrics.mark_user_done()
+                self._check_emergency(text)
                 self._maybe_research(text)
                 if len(text.strip()) >= 12:
                     self._pending_user = text

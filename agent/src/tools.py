@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import functools
 import logging
+import re
+import time
 from typing import Annotated, Any
 
 from langchain_core.tools import tool
@@ -136,6 +138,101 @@ def bind_session_patient(
         aliases={service.patient_display(patient)},
     )
     return patient, cap
+
+
+@tool
+@guarded
+def verify_identity(
+    spoken_name: Annotated[str, "The full name the patient just said, verbatim"],
+    spoken_date_of_birth: Annotated[
+        str, "The date of birth the patient just said, any format, e.g. 'April 12th 1992'"
+    ],
+) -> str:
+    """Check two identifiers against the bound patient before discussing their record.
+
+    Closes the half of the loop the capability cannot. Binding proves the agent writes to one
+    record; it says nothing about whether the person speaking is that patient. Verification is
+    recorded, never enforced here: it must never sit between a patient and help.
+    """
+    assert _medplum is not None
+    patient = _medplum.ensure_demo_patient()
+    expected_name = _medplum.patient_display(patient)
+    expected_dob = patient.get("birthDate") or ""
+
+    name_ok = _name_matches(spoken_name, expected_name)
+    dob_ok = _dob_matches(spoken_date_of_birth, expected_dob)
+    verified = name_ok and dob_ok
+
+    _session["identity"] = {
+        "verified": verified,
+        "name_match": name_ok,
+        "dob_match": dob_ok,
+        "identifiers_checked": 2,
+        "at": time.time(),
+    }
+    _medplum.write_audit_event(
+        {
+            "action": "verify-identity",
+            "outcome": "success" if verified else "minor-failure",
+            "patient_id": patient["id"],
+            "detail": f"name_match={name_ok} dob_match={dob_ok}",
+        }
+    )
+    if verified:
+        return (
+            f"IDENTITY_VERIFIED two identifiers matched for {expected_name}. "
+            "Thank them briefly and move on to why they are here."
+        )
+    mismatch = "name" if not name_ok else "date of birth"
+    return (
+        f"IDENTITY_UNVERIFIED the {mismatch} did not match the record. Ask once more, politely. "
+        "If it still does not match, say a staff member will confirm their details, continue "
+        "taking their history, and do not read anything back from their record."
+    )
+
+
+def _name_matches(spoken: str, expected: str) -> bool:
+    """Forgiving on everything except the parts that identify a person.
+
+    Speech-to-text mangles punctuation and case constantly, and patients say "Jordan" where the
+    record says "Jordan Lee". Requiring the record's tokens to be present tolerates that without
+    tolerating a different name.
+    """
+    said = {w for w in re.findall(r"[a-z]+", spoken.lower()) if len(w) > 1}
+    want = {w for w in re.findall(r"[a-z]+", expected.lower()) if len(w) > 1}
+    return bool(want) and want.issubset(said)
+
+
+_MONTHS = {
+    m: i
+    for i, m in enumerate(
+        "january february march april may june july august september october november "
+        "december".split(),
+        start=1,
+    )
+}
+
+
+def _dob_matches(spoken: str, expected_iso: str) -> bool:
+    """Compare a spoken date to an ISO birthDate.
+
+    A date read aloud arrives as "April twelfth, nineteen ninety two" or "4/12/1992", never as
+    1992-04-12, so match on the three components rather than on string equality.
+    """
+    if not expected_iso or len(expected_iso) < 10:
+        return False
+    year, month, day = expected_iso[:4], int(expected_iso[5:7]), int(expected_iso[8:10])
+    low = spoken.lower()
+    if year not in low:
+        return False
+    numbers = {int(n) for n in re.findall(r"\d{1,2}", low)}
+    month_ok = month in numbers or any(
+        name.startswith(low_word) or low_word.startswith(name[:3])
+        for low_word in re.findall(r"[a-z]+", low)
+        for name, num in _MONTHS.items()
+        if num == month
+    )
+    return month_ok and day in numbers
 
 
 @tool
@@ -420,6 +517,7 @@ async def get_wearable_risk(
 TOOLS = [
     moss_search,
     ensure_patient,
+    verify_identity,
     chart_to_medplum,
     deep_research,
     propose_care_plan,
