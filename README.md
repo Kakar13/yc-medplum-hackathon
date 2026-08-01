@@ -67,6 +67,7 @@ every AI action. Preflight implements that sentence and adds the missing piece: 
 | Governance thesis + HAARF scorecard | [docs/AGENT_GOVERNANCE.md](docs/AGENT_GOVERNANCE.md) |
 | Product brief (science, market, psychology) | [docs/PRODUCT_BRIEF.md](docs/PRODUCT_BRIEF.md) |
 | Closed-loop wearable synthesis | [docs/CLOSED_LOOP_SYNTHESIS.md](docs/CLOSED_LOOP_SYNTHESIS.md) |
+| Dental voice/photo triage protocol | [docs/DENTAL_TRIAGE_PROTOCOL.md](docs/DENTAL_TRIAGE_PROTOCOL.md) |
 
 ```bash
 # Terminal 1
