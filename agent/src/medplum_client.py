@@ -113,11 +113,14 @@ class MedplumService:
         if self.settings.medplum_demo_patient_id and self._client:
             return self._client.read_resource("Patient", self.settings.medplum_demo_patient_id)
 
+        # Matches Stedi's documented Aetna dependent fixture (payer 60054, subscriber John Doe,
+        # member AETNA9wcSu). Those values are fixed by Stedi, so the patient is what moves:
+        # otherwise we verify Jordan's identity and then price a different person's coverage.
         patient = {
             "resourceType": "Patient",
-            "name": [{"use": "official", "family": "Lee", "given": ["Jordan"]}],
+            "name": [{"use": "official", "family": "Doe", "given": ["Jordan"]}],
             "gender": "unknown",
-            "birthDate": "1992-04-12",
+            "birthDate": "2001-07-14",
             "telecom": [{"system": "phone", "value": "+15555550100"}],
         }
         if self._client:
