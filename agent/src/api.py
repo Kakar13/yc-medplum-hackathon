@@ -460,6 +460,7 @@ async def chart(encounter_id: str):
     data["proposals"] = medplum.list_proposals(encounter_id=encounter_id)
     data["research"] = (get_session().get("last_research") or {}).get("citations") or []
     data["periochart"] = get_session().get("periochart")
+    data["monitoring"] = await OpenWearablesService().monitoring_window(14)
     data["capability"] = (
         get_gateway().active.public() if get_gateway().active else None
     )

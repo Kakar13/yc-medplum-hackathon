@@ -581,6 +581,15 @@ async def get_wearable_risk(
 ) -> str:
     """Fetch normalized wearable recovery/sleep via Open Wearables — triage signal only."""
     assert _wearables is not None
+    window = await _wearables.monitoring_window(14)
+    if window.get("available"):
+        recent = "; ".join(
+            f"{n['date']}: {', '.join(n['reasons'])}" for n in window["surfaced_nights"][:3]
+        )
+        return (
+            f"{window['context']} Worth mentioning: {recent}. "
+            "Say this as a change from their own normal, never as a raw score."
+        )
     snap = await _wearables.risk_snapshot(user_id or None)
     return snap["context"]
 

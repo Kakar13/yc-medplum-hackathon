@@ -1191,3 +1191,14 @@ table.scorecard tr.fail td {
   padding-top: 1px;
 }
 .perio-pending ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+
+/* Passive monitoring — reviewed vs surfaced */
+.monitor-summary { display: flex; gap: 16px; margin-bottom: 10px; font-size: 12px; }
+.monitor-count strong { font-size: 18px; margin-right: 4px; }
+.monitor-count.surfaced strong { color: #f59e0b; }
+.monitor-count.muted { opacity: 0.6; }
+.monitor-strip { display: flex; gap: 3px; margin-bottom: 10px; }
+.monitor-night { flex: 1; height: 20px; border-radius: 3px; background: rgba(148, 163, 184, 0.22); }
+.monitor-night.on { background: #f59e0b; }
+.monitor-reasons { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
+.monitor-reasons li { display: flex; gap: 10px; }

@@ -328,6 +328,43 @@ export function Console() {
             )}
           </div>
 
+          {chart?.monitoring?.available && (
+            <div className="clin-block">
+              <h3>Passive monitoring</h3>
+              <div className="monitor-summary">
+                <span className="monitor-count">
+                  <strong>{chart.monitoring.reviewed}</strong> nights reviewed
+                </span>
+                <span className="monitor-count surfaced">
+                  <strong>{chart.monitoring.surfaced}</strong> surfaced
+                </span>
+                <span className="monitor-count muted">
+                  <strong>{chart.monitoring.suppressed}</strong> within baseline
+                </span>
+              </div>
+              <div className="monitor-strip">
+                {chart.monitoring.nights?.map((n) => (
+                  <span
+                    key={n.date}
+                    className={`monitor-night ${n.surfaced ? 'on' : 'off'}`}
+                    title={`${n.date}: ${n.reasons.join('; ') || 'within baseline'}`}
+                  />
+                ))}
+              </div>
+              <ul className="monitor-reasons">
+                {chart.monitoring.nights
+                  ?.filter((n) => n.surfaced)
+                  .map((n) => (
+                    <li key={n.date}>
+                      <span className="perio-date">{n.date}</span>
+                      <span>{n.reasons.join('; ')}</span>
+                    </li>
+                  ))}
+              </ul>
+              <p className="sub">{chart.monitoring.context}</p>
+            </div>
+          )}
+
           {chart?.periochart && (
             <div className="clin-block">
               <h3>Periodontal chart</h3>

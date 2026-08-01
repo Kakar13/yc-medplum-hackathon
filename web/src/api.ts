@@ -47,6 +47,7 @@ export type ChartPayload = {
   research?: Citation[];
   capability?: Capability | null;
   periochart?: Periochart | null;
+  monitoring?: Monitoring | null;
 };
 
 export type Citation = {
@@ -76,6 +77,24 @@ export type Proposal = {
   task_status?: string;
   reviewer?: string;
   awaiting_review?: boolean;
+};
+
+export type MonitoringNight = {
+  date: string;
+  level: string;
+  score: number;
+  reasons: string[];
+  surfaced: boolean;
+};
+
+export type Monitoring = {
+  available: boolean;
+  reviewed?: number;
+  surfaced?: number;
+  suppressed?: number;
+  context?: string;
+  baseline?: Record<string, number | null>;
+  nights?: MonitoringNight[];
 };
 
 export type PerioTooth = {

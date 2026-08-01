@@ -234,6 +234,28 @@ class WhoopClient:
         records = data.get("records") or []
         return records[0] if records else {}
 
+    async def recent_days(self, limit: int = 14) -> list[dict[str, Any]]:
+        """The last N nights, recovery paired to the sleep it scored.
+
+        Monitoring is a window, not a reading. A single night says almost nothing — the question
+        a clinician has is whether this is a change, and that needs the nights either side of it.
+        """
+        rec_data = await self._get("/recovery", {"limit": limit})
+        sleep_data = await self._get("/activity/sleep", {"limit": limit})
+        recoveries = [self.normalize_recovery(r) for r in (rec_data.get("records") or [])]
+        sleeps = [self.normalize_sleep(s) for s in (sleep_data.get("records") or [])]
+        by_date: dict[str, dict[str, Any]] = {}
+        for r in recoveries:
+            by_date.setdefault(r["date"], {})["recovery"] = r
+        for s in sleeps:
+            if s.get("nap"):  # A nap is not a night, and scoring it as one invents bad nights.
+                continue
+            by_date.setdefault(s["date"], {})["sleep"] = s
+        return [
+            {"date": d, "recovery": v.get("recovery"), "sleep": v.get("sleep")}
+            for d, v in sorted(by_date.items(), reverse=True)
+        ]
+
     # --- normalization to the FlareCheck / Open Wearables summary shape ---
 
     def normalize_recovery(self, record: dict[str, Any]) -> dict[str, Any]:
