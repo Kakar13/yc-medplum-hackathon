@@ -297,7 +297,11 @@ class OpenWearablesService:
                 f"{len(evaluated)} nights reviewed from Whoop against this patient's own "
                 f"baseline (recovery {baseline.get('recovery_score')}, sleep "
                 f"{baseline.get('duration_minutes')} min). {len(surfaced)} departed from it; "
-                f"{len(evaluated) - len(surfaced)} did not and were not charted."
+                f"{len(evaluated) - len(surfaced)} did not and were not charted. "
+                # Departures in sleep, temperature or heart rate are nonspecific. Stating the
+                # limit next to the number stops the number being read as a finding, and this
+                # must never displace a symptom screen.
+                "Supporting context only — nonspecific, and not a test for any condition."
             ),
         }
 

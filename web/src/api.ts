@@ -105,7 +105,7 @@ export type PerioTooth = {
   depths_mm: number[];
   max_depth_mm: number;
   bleeding_on_probing: boolean;
-  severity: 'healthy' | 'early' | 'advanced';
+  severity: 'shallow' | 'moderate' | 'deep';
   restoration: string;
   note: string;
   status: string;
@@ -127,7 +127,7 @@ export type Periochart = {
   } | null;
   teeth: PerioTooth[];
   summary: {
-    advanced_sites: number[];
+    deep_pocket_sites: number[];
     pending_treatment: { tooth: number; plan: string; urgency: string }[];
   };
 };

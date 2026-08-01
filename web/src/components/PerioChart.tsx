@@ -1,9 +1,11 @@
 import type { Periochart } from '../api';
 
+// Named after what was measured, not what it might mean. Probing depth alone does not
+// establish attachment loss or a periodontal stage.
 const SEVERITY_LABEL: Record<string, string> = {
-  healthy: 'Healthy',
-  early: 'Early loss',
-  advanced: 'Advanced',
+  shallow: '1-3mm',
+  moderate: '4-5mm',
+  deep: '6mm+',
 };
 
 /**

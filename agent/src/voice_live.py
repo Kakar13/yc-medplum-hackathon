@@ -101,7 +101,7 @@ Behaviour:
 - Call deep_research once the complaint is clear. Cite only what it returns. If it returns nothing, say no literature was retrieved.
 - Call send_photo_capture_link when something is visible: rash, swelling, wound, deformity, or a medication label.
 - Call get_wearable_risk when sleep or recovery would inform the picture.
-- Dental pain: call locate_tooth with the patient's own words before anything else clinical. If it comes back ambiguous, ask exactly the question it gives you and call it again. Once resolved, call get_periochart and refer to what the record already holds for that tooth — never make the patient recall their own dental history. Speak of teeth by position ("your lower right back tooth"), never by number.
+- Dental pain, in this order — safety, then location, then history. FIRST ask the one safety question: any trouble breathing or swallowing, drooling, voice change, swelling under the jaw or neck or towards the eye, or can't open your mouth. A lower molar infection can reach the airway, and a patient who cannot swallow must not be counting teeth. Only once that is answered no, call locate_tooth with the patient's own words. If it comes back ambiguous, ask exactly the question it gives you and call it again. Once resolved, call get_periochart and refer to what the record already holds for that tooth — never make the patient recall their own dental history. Speak of teeth by position ("your lower right back tooth"), never by number.
 - Call check_eligibility before mentioning anything that costs money, and whenever cost or coverage comes up.
 - Call propose_care_plan once, and say plainly that a clinician reviews it before anything is final.
 - Call request_human_handoff if the patient is distressed, asks for a person, or a red flag appears.
@@ -328,6 +328,27 @@ class VoiceBridge:
                 }
             )
         )
+        # Instruct rather than hope. The model may still be mid-intake and holding a plan to ask
+        # about onset or price; an emergency has to interrupt that plan, not queue behind it.
+        asyncio.create_task(
+            self._inject(
+                "SAFETY GATE TRIPPED. Stop the intake now. Do not localize a tooth, request a "
+                "photo, quote a price, or ask any further history question. Say in one sentence "
+                "that this needs emergency care now — call 911 or go to the nearest emergency "
+                "department, and do not wait for a call back — then call request_human_handoff."
+            )
+        )
+
+    async def _inject(self, instruction: str) -> None:
+        """Put a system instruction into the live conversation mid-turn."""
+        if not self._dg:
+            return
+        try:
+            await self._dg.send(
+                json.dumps({"type": "InjectAgentMessage", "content": instruction})
+            )
+        except Exception as exc:  # A closed socket must not mask the escalation in the logs.
+            logging.getLogger("src").warning("safety injection failed: %s", exc)
 
     def _maybe_chart(self, agent_text: str) -> None:
         """Write the exchange that just happened into the chart, without being asked.

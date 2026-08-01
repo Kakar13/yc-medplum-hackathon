@@ -297,12 +297,19 @@ _BLEEDING = {3, 18, 30, 31}
 
 
 def _severity(depths: list[int]) -> str:
+    """Band the deepest pocket, and say only that.
+
+    Probing depth alone does not establish attachment loss or a periodontal stage — that needs
+    clinical attachment level, radiographs and an examination. Labelling a 5mm pocket "early
+    attachment loss" states a diagnosis this data cannot support, so the bands are named after
+    what was actually measured.
+    """
     worst = max(depths)
     if worst >= 6:
-        return "advanced"
+        return "deep"
     if worst >= 4:
-        return "early"
-    return "healthy"
+        return "moderate"
+    return "shallow"
 
 
 def periochart(focus_tooth: int | None = None) -> dict[str, Any]:
@@ -333,8 +340,8 @@ def periochart(focus_tooth: int | None = None) -> dict[str, Any]:
             }
         )
 
-    advanced = [t for t in teeth if t["severity"] == "advanced"]
-    early = [t for t in teeth if t["severity"] == "early"]
+    advanced = [t for t in teeth if t["severity"] == "deep"]
+    early = [t for t in teeth if t["severity"] == "moderate"]
     focus = next((t for t in teeth if t["number"] == focus_tooth), None)
     return {
         "system": "Universal Numbering System (1-32)",
@@ -364,8 +371,8 @@ def periochart(focus_tooth: int | None = None) -> dict[str, Any]:
         ),
         "teeth": teeth,
         "summary": {
-            "advanced_sites": [t["number"] for t in advanced],
-            "early_sites": [t["number"] for t in early],
+            "deep_pocket_sites": [t["number"] for t in advanced],
+            "moderate_pocket_sites": [t["number"] for t in early],
             "bleeding_sites": sorted(_BLEEDING),
             "pending_treatment": [
                 {"tooth": 30, "plan": "Root canal then crown", "urgency": "urgent"},
@@ -388,10 +395,10 @@ def periochart_for_voice(focus_tooth: int | None = None) -> str:
                 f"{'bleeding on probing' if t['bleeding_on_probing'] else 'no bleeding'}. "
                 f"{t['note'] or t['restoration']}"
             )
-    adv = chart["summary"]["advanced_sites"]
+    adv = chart["summary"]["deep_pocket_sites"]
     if adv:
         lines.append(
-            "Advanced pocketing at " + ", ".join(tooth_label(n) for n in adv) + "."
+            "Pockets of six millimetres or more at " + ", ".join(tooth_label(n) for n in adv) + "."
         )
     if chart["hygiene_due"]:
         lines.append(
