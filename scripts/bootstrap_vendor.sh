@@ -19,41 +19,49 @@ mkdir -p infra
 FORCE=0
 [[ "${1:-}" == "--force" ]] && FORCE=1
 
-# name|url|pinned commit
+# name|url|pinned commit. Must be the *full* SHA: `git fetch origin <short-sha>` is rejected by
+# the protocol, so an abbreviated pin silently falls back to the default branch.
 REPOS=(
-  "medplum|https://github.com/medplum/medplum.git|e976c70"
+  "medplum|https://github.com/medplum/medplum.git|e976c706c79ddc7a750c6c871f43d31f7c799048"
 )
 
 for entry in "${REPOS[@]}"; do
   IFS='|' read -r name url sha <<<"$entry"
   dest="infra/$name"
 
+  short="${sha:0:9}"
+
   if [[ -d "$dest/.git" && $FORCE -eq 0 ]]; then
-    have=$(git -C "$dest" rev-parse --short HEAD 2>/dev/null || echo unknown)
-    if [[ "$have" == "$sha"* ]]; then
-      echo "ok       $name already at $sha"
+    have=$(git -C "$dest" rev-parse HEAD 2>/dev/null || echo unknown)
+    if [[ "$have" == "$sha" ]]; then
+      echo "ok       $name already at $short"
     else
-      echo "WARNING  $name is at $have, expected $sha (use --force to reset)"
+      echo "WARNING  $name is at ${have:0:9}, expected $short (use --force to reset)"
     fi
     continue
   fi
 
   [[ $FORCE -eq 1 ]] && rm -rf "$dest"
-  echo "fetching $name @ $sha ..."
+  echo "fetching $name @ $short ..."
   git init --quiet "$dest"
   git -C "$dest" remote add origin "$url" 2>/dev/null || true
 
-  # Fetching a bare SHA shallowly keeps this to seconds rather than a full history clone.
-  # Not every host allows it, so fall back to a shallow default-branch clone.
+  # Fetching the single pinned commit shallowly keeps this to seconds rather than a full history
+  # clone. Not every host allows it, so fall back to a shallow default-branch clone.
   if git -C "$dest" fetch --quiet --depth 1 origin "$sha" 2>/dev/null; then
     git -C "$dest" checkout --quiet FETCH_HEAD
-    echo "ok       $name at $(git -C "$dest" rev-parse --short HEAD)"
+    echo "ok       $name at $short (exact pin)"
   else
-    echo "         direct SHA fetch unavailable, falling back to default branch"
+    echo "         host refused a direct commit fetch, falling back to default branch"
     git -C "$dest" fetch --quiet --depth 50 origin
     default=$(git -C "$dest" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || echo origin/main)
     git -C "$dest" checkout --quiet -B main "$default"
-    echo "WARNING  $name is at $(git -C "$dest" rev-parse --short HEAD), not the pinned $sha"
+    got=$(git -C "$dest" rev-parse HEAD)
+    if [[ "$got" == "$sha" ]]; then
+      echo "ok       $name at $short (default branch happens to be the pin)"
+    else
+      echo "WARNING  $name is at ${got:0:9}, not the pinned $short — upstream has moved"
+    fi
   fi
 done
 
