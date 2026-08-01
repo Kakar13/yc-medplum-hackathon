@@ -215,8 +215,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--bundle",
         type=Path,
-        default=DEFAULT_BUNDLE,
-        help="Path to Synthea FHIR Bundle (transaction or collection)",
+        nargs="+",
+        default=[DEFAULT_BUNDLE],
+        help="One or more Synthea FHIR Bundles; docs are merged and de-duplicated by id",
     )
     parser.add_argument(
         "--out",
@@ -231,8 +232,19 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
 
-    bundle = load_bundle(args.bundle)
-    docs = bundle_to_docs(bundle)
+    # A single-condition index makes every complaint retrieve that condition's history, so the
+    # default is to merge every bundle we have.
+    bundles = [load_bundle(p) for p in args.bundle]
+    docs = []
+    seen: set[str] = set()
+    for path, bundle in zip(args.bundle, bundles, strict=True):
+        for d in bundle_to_docs(bundle):
+            if d["id"] in seen:
+                continue
+            seen.add(d["id"])
+            docs.append(d)
+        console.print(f"[dim]  + {path.name}[/dim]")
+    bundle = bundles[0]
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(docs, indent=2) + "\n")
     console.print(f"[green]Wrote {len(docs)} docs → {args.out}[/green]")

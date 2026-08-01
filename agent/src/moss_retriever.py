@@ -30,6 +30,16 @@ DEFAULT_ALPHA = 0.6
 DEFAULT_TOP_K = 4
 DEFAULT_MODEL = "moss-minilm"
 
+# Moss always returns top_k documents, with no notion of "nothing matched". Without a floor a
+# knee complaint retrieves the patient's eczema history at ~0.6 and it lands in the prompt as
+# if it were relevant. Genuine hits score ~0.9-1.0, so this cleanly separates them.
+MIN_LONG_TERM_SCORE = 0.75
+
+# One shared short-term index, partitioned by encounter in metadata. A per-encounter index
+# exhausts the account's index quota after a couple of visits (HTTP 429
+# USAGE_LIMIT_EXCEEDED), which used to fail silently at push time.
+SESSION_INDEX_NAME = "preflight-session"
+
 
 class MossService:
     """Sub-10ms semantic search: persistent index + per-encounter session."""
@@ -105,16 +115,14 @@ class MossService:
         return info
 
     async def get_session(self, session_id: str):
-        """Short-term SessionIndex for this encounter / call (live-call pattern)."""
+        """Short-term SessionIndex, shared across encounters and filtered by metadata."""
         if not self._client:
             return None
-        if session_id in self._sessions:
-            return self._sessions[session_id]
-        session = await self._client.session(
-            index_name=f"flare-{session_id}", model_id=DEFAULT_MODEL
-        )
-        self._sessions[session_id] = session
-        return session
+        if SESSION_INDEX_NAME not in self._sessions:
+            self._sessions[SESSION_INDEX_NAME] = await self._client.session(
+                index_name=SESSION_INDEX_NAME, model_id=DEFAULT_MODEL
+            )
+        return self._sessions[SESSION_INDEX_NAME]
 
     async def add_turn(
         self,
@@ -135,20 +143,35 @@ class MossService:
         await session.add_docs(
             [
                 DocumentInfo(
-                    id=turn_id,
+                    id=f"{session_id}:{turn_id}",
                     text=text.strip(),
-                    metadata={"role": role, "source": "flarecheck-session"},
+                    metadata={
+                        "role": role,
+                        "source": "preflight-session",
+                        "encounter": session_id,
+                    },
                 )
             ],
             MutationOptions(upsert=True),
         )
 
     async def push_session(self, session_id: str) -> dict[str, Any] | None:
-        if not self._client or session_id not in self._sessions:
+        """Persist the short-term index. Returns an error dict rather than raising.
+
+        Callers treat this as best-effort, so a failure must still be visible — a silent
+        `except: pass` here previously made a handoff look successful while the human
+        received none of the conversation context.
+        """
+        if not self._client or SESSION_INDEX_NAME not in self._sessions:
             return None
-        session = self._sessions[session_id]
-        result = await session.push_index()
+        session = self._sessions[SESSION_INDEX_NAME]
+        try:
+            result = await session.push_index()
+        except Exception as exc:  # noqa: BLE001 - surfaced to the caller, never fatal
+            logger.warning("Moss push_session failed for %s: %s", session_id, exc)
+            return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
         return {
+            "ok": True,
             "index_name": getattr(result, "index_name", None),
             "doc_count": getattr(result, "doc_count", None),
         }
@@ -161,8 +184,13 @@ class MossService:
         session_id: str | None = None,
         metadata_type: str | None = None,
         alpha: float = DEFAULT_ALPHA,
+        min_score: float = MIN_LONG_TERM_SCORE,
     ) -> list[Document]:
-        """Hybrid query over long-term index (+ session when session_id set)."""
+        """Hybrid query over long-term index (+ session when session_id set).
+
+        Long-term hits below `min_score` are dropped: retrieving unrelated history is worse
+        than retrieving nothing, because the agent will try to use it.
+        """
         if self._client:
             if not self._long_term_loaded:
                 await self.ensure_index()
@@ -181,6 +209,8 @@ class MossService:
             )
             docs: list[Document] = []
             for d in knowledge.docs:
+                if float(d.score or 0) < min_score:
+                    continue
                 meta = dict(d.metadata or {})
                 docs.append(
                     Document(
@@ -198,8 +228,17 @@ class MossService:
             if session_id:
                 session = await self.get_session(session_id)
                 if session is not None:
+                    # This encounter's own turns only — the index is shared.
                     recent = await session.query(
-                        query, QueryOptions(top_k=min(3, top_k), alpha=alpha)
+                        query,
+                        QueryOptions(
+                            top_k=min(3, top_k),
+                            alpha=alpha,
+                            filter={
+                                "field": "encounter",
+                                "condition": {"$eq": session_id},
+                            },
+                        ),
                     )
                     for d in recent.docs:
                         meta = dict(d.metadata or {})
@@ -258,7 +297,10 @@ class MossService:
             query, top_k=top_k, session_id=session_id, metadata_type=metadata_type
         )
         if not docs:
-            return "No relevant history found."
+            return (
+                "No relevant history found for this query. "
+                "Do not infer history that isn't here."
+            )
         lines = []
         for i, d in enumerate(docs):
             lane = d.metadata.get("moss_lane") or d.metadata.get("source", "?")
