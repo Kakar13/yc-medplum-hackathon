@@ -1,22 +1,33 @@
-"""LangChain tools wired to Moss + Medplum + Stedi + Open Wearables + photo capture."""
+"""LangChain tools wired to Moss + Medplum + Stedi + wearables + research + capture.
+
+Every tool runs behind the capability gateway: no tool accepts a patient identifier,
+and the subject of care is read from the session capability rather than model output.
+"""
 
 from __future__ import annotations
 
-from typing import Annotated
+import functools
+import logging
+from typing import Annotated, Any
 
 from langchain_core.tools import tool
 
+from .capability import CapabilityError, get_gateway
 from .capture_links import get_capture_store
 from .config import get_settings
 from .medplum_client import MedplumService
+
+logger = logging.getLogger(__name__)
 from .moss_retriever import MossService
 from .open_wearables import OpenWearablesService
+from .research import ResearchService
 from .stedi_client import StediService
 
 _moss: MossService | None = None
 _medplum: MedplumService | None = None
 _stedi: StediService | None = None
 _wearables: OpenWearablesService | None = None
+_research: ResearchService | None = None
 _session: dict = {
     "patient_id": None,
     "encounter_id": None,
@@ -29,19 +40,51 @@ def bind_services(
     medplum: MedplumService,
     stedi: StediService | None = None,
     wearables: OpenWearablesService | None = None,
+    research: ResearchService | None = None,
 ) -> None:
-    global _moss, _medplum, _stedi, _wearables
+    global _moss, _medplum, _stedi, _wearables, _research
     _moss = moss
     _medplum = medplum
     _stedi = stedi or StediService()
     _wearables = wearables or OpenWearablesService()
+    _research = research or ResearchService()
+    get_gateway().set_audit_sink(medplum)
 
 
 def get_session() -> dict:
     return _session
 
 
+def guarded(fn):
+    """Adjudicate a tool call against the active patient capability before running it."""
+    gateway = get_gateway()
+
+    @functools.wraps(fn)
+    async def awrapper(*args, **kwargs):
+        decision = gateway.adjudicate(fn.__name__, kwargs)
+        if not decision.allowed:
+            return f"DENIED [{decision.control}] {decision.reason}"
+        return await fn(*args, **kwargs)
+
+    @functools.wraps(fn)
+    def swrapper(*args, **kwargs):
+        decision = gateway.adjudicate(fn.__name__, kwargs)
+        if not decision.allowed:
+            return f"DENIED [{decision.control}] {decision.reason}"
+        return fn(*args, **kwargs)
+
+    import inspect
+
+    return awrapper if inspect.iscoroutinefunction(fn) else swrapper
+
+
+def _subject() -> str:
+    """Patient id from the capability — the only sanctioned source."""
+    return get_gateway().subject_of_care()
+
+
 @tool
+@guarded
 async def moss_search(
     query: Annotated[
         str, "Clinical question or symptom to ground in patient history / protocols"
@@ -64,27 +107,124 @@ async def moss_search(
     )
 
 
+def bind_session_patient(
+    medplum: MedplumService | None = None,
+) -> tuple[dict[str, Any], Any]:
+    """Bind this agent session to exactly one patient, and return (patient, capability).
+
+    Called by the server when a session opens — deliberately *not* left to the model. If
+    issuing the capability depended on the agent choosing to call a tool, the binding would be
+    contingent on model behaviour, which is the failure mode this gateway exists to remove.
+    Takes the service explicitly so binding works before the agent graph is constructed.
+    """
+    service = medplum or _medplum
+    if service is None:
+        raise RuntimeError("bind_session_patient needs a MedplumService")
+    gateway = get_gateway()
+    patient = service.ensure_demo_patient()
+    _session["patient_id"] = patient["id"]
+    cap = gateway.issue(
+        patient_id=patient["id"],
+        encounter_id=_session.get("encounter_id"),
+        purpose_of_use="TREAT",
+        tools=tuple(t.name for t in TOOLS),
+        aliases={service.patient_display(patient)},
+    )
+    return patient, cap
+
+
 @tool
 def ensure_patient() -> str:
-    """Ensure demo Patient exists in Medplum; returns Patient id."""
+    """Confirm which patient this session is bound to, and the scope of that binding.
+
+    The binding is established by the server when the session opens; calling this is
+    idempotent and simply reports the active capability.
+    """
     assert _medplum is not None
-    patient = _medplum.ensure_demo_patient()
-    _session["patient_id"] = patient["id"]
-    return f"Patient/{patient['id']} ready ({_medplum.patient_display(patient)})"
+    gateway = get_gateway()
+    if gateway.active is not None:
+        patient, cap = _medplum.ensure_demo_patient(), gateway.active
+    else:
+        patient, cap = bind_session_patient()
+    return (
+        f"Patient/{patient['id']} ready ({_medplum.patient_display(patient)}). "
+        f"Capability issued: scope={cap.public()['smart_scope']} "
+        f"purpose={cap.purpose_of_use} expires_in={cap.public()['expires_in_seconds']}s. "
+        f"Do not pass patient identifiers to any tool — the subject is bound."
+    )
 
 
 @tool
+@guarded
+async def deep_research(
+    complaint: Annotated[
+        str, "The presenting complaint in clinical terms, e.g. 'swollen painful knee after running'"
+    ],
+) -> str:
+    """Retrieve real literature (Europe PMC) for any complaint. Cite ONLY what comes back.
+
+    Returns numbered citations. Never invent a source; if nothing is returned, say so.
+    """
+    assert _research is not None
+    brief = await _research.brief(complaint, limit=5)
+    _session["last_research"] = brief
+    return brief["text"]
+
+
+@tool
+@guarded
+async def propose_care_plan(
+    title: Annotated[str, "Short plan title, e.g. 'Suspected patellofemoral overuse — initial plan'"],
+    summary: Annotated[str, "Why this plan, tailored to THIS patient's history and findings"],
+    activities: Annotated[
+        str, "Numbered or newline-separated concrete next steps for the patient"
+    ],
+) -> str:
+    """Propose an n=1 plan as a DRAFT CarePlan plus a peer-review Task for a clinician.
+
+    The agent can never activate care. This writes a proposal with AI authorship recorded
+    in Provenance; a human reviewer commits or rejects it.
+    """
+    assert _medplum is not None
+    patient_id = _subject()
+    if not _session.get("encounter_id"):
+        enc = _medplum.create_encounter(patient_id, "Pre-visit check-in")
+        _session["encounter_id"] = enc["id"]
+        get_gateway().bind_encounter(enc["id"])
+
+    steps = [
+        s.strip(" -•\t")
+        for s in (activities or "").replace(";", "\n").splitlines()
+        if s.strip(" -•\t")
+    ]
+    citations = (_session.get("last_research") or {}).get("citations") or []
+    result = _medplum.propose_care_plan(
+        patient_id,
+        _session["encounter_id"],
+        title=title,
+        summary=summary,
+        activities=steps or ["Discuss findings with clinician"],
+        citations=citations,
+    )
+    _session["care_plan_id"] = result["care_plan_id"]
+    return (
+        f"PLAN_PROPOSED status=draft CarePlan/{result['care_plan_id']} "
+        f"Task/{result['task_id']} Provenance/{result['provenance_id']} "
+        f"citations={len(citations)}. Awaiting clinician review — tell the patient a "
+        f"clinician will review before anything is final."
+    )
+
+
+@tool
+@guarded
 async def chart_to_medplum(
     user_text: Annotated[str, "What the patient said"],
     agent_summary: Annotated[str, "Short clinical summary of this turn"],
 ) -> str:
     """Write this voice turn into Medplum as Encounter + Observation + Composition."""
     assert _medplum is not None
-    if not _session.get("patient_id"):
-        patient = _medplum.ensure_demo_patient()
-        _session["patient_id"] = patient["id"]
     result = _medplum.chart_voice_turn(
-        patient_id=_session["patient_id"],
+        patient_id=_subject(),
         encounter_id=_session.get("encounter_id"),
         user_text=user_text,
         agent_text=agent_summary,
@@ -114,38 +254,40 @@ async def chart_to_medplum(
 
 
 @tool
+@guarded
 def send_photo_capture_link(
     reason: Annotated[
-        str, "Why we need a photo, e.g. eczema flare on inner elbow"
-    ] = "Eczema / rash flare photo",
+        str,
+        "What the photo should show, e.g. 'rash on inner elbow', 'swollen ankle', "
+        "'wound edge', 'eye redness', 'medication bottle label'",
+    ] = "Clinical photo for the visit",
 ) -> str:
     """Issue a short-lived secure phone link for the patient to upload a clinical photo.
 
-    Uses Medplum Binary + securityContext. Patient never receives API secrets.
-    Tell the patient the link expires in 15 minutes and is single-use.
+    Useful for anything visible: skin, swelling, wounds, eyes, gait video stills, or the
+    label on a medication the patient can't name. Uses Medplum Binary + securityContext,
+    so the phone never receives API credentials. Expires in 15 minutes, single-use.
     """
     assert _medplum is not None
     store = get_capture_store()
     settings = get_settings()
 
-    if not _session.get("patient_id"):
-        patient = _medplum.ensure_demo_patient()
-        _session["patient_id"] = patient["id"]
-        patient_display = _medplum.patient_display(patient)
-    else:
-        patient_display = "Patient"
-        try:
-            if _medplum._client:
-                p = _medplum._client.read_resource("Patient", _session["patient_id"])
-                patient_display = _medplum.patient_display(p)
-        except Exception:
-            pass
+    patient_id = _subject()
+    _session["patient_id"] = patient_id
+    patient_display = "Patient"
+    try:
+        if _medplum._client:
+            p = _medplum._client.read_resource("Patient", patient_id)
+            patient_display = _medplum.patient_display(p)
+    except Exception:
+        pass
 
     if not _session.get("encounter_id"):
-        enc = _medplum.create_encounter(_session["patient_id"], reason)
+        enc = _medplum.create_encounter(patient_id, reason)
         _session["encounter_id"] = enc["id"]
+        get_gateway().bind_encounter(enc["id"])
 
-    binary = _medplum.create_upload_binary(_session["patient_id"], "image/jpeg")
+    binary = _medplum.create_upload_binary(patient_id, "image/jpeg")
     upload_url = _medplum.presigned_upload_url(binary["id"])
     link = store.issue(
         patient_id=_session["patient_id"],
@@ -165,23 +307,72 @@ def send_photo_capture_link(
         f"single_use=true\n"
         f"encounter_id={_session['encounter_id']}\n"
         f"clinician_chart={chart_url}\n"
-        f"Tell the patient to open the link on their phone, photograph the flare, and submit. "
-        f"Not a diagnosis — photo attaches to their Medplum chart for the clinician."
+        f"Tell the patient to open the link on their phone, take the photo, and submit. "
+        f"Not a diagnosis — the photo attaches to their chart for the clinician."
     )
 
 
+# Call-an-ambulance now. Kept narrow on purpose: telling every escalation to dial 911 trains
+# patients to ignore the instruction, and it is wrong for the many complaints that need to be
+# seen today rather than resuscitated.
+EMERGENCY_HINTS = (
+    "chest pain", "heart attack", "cardiac", "stroke", "face droop", "slurred",
+    "one-sided weakness", "arm numb", "arm numbness", "trouble breathing",
+    "can't breathe", "cant breathe", "struggling to breathe", "gasping",
+    "anaphyla", "throat closing", "suicid", "self-harm", "bleeding won't stop",
+    "severe bleeding", "unconscious", "passed out", "altered consciousness",
+    "stiff neck", "worst headache", "coughing up blood",
+)
+
+# Needs to be seen today, but an ambulance is the wrong answer. Exertional breathlessness over
+# days sits here; sudden inability to breathe is in the tier above.
+URGENT_HINTS = (
+    "short of breath", "shortness of breath", "breathless", "dyspnea",
+    "high fever", "persistent fever", "dehydrat", "can't keep fluids",
+    "spreading redness", "worsening rapidly", "vision loss", "severe pain",
+)
+
+
 @tool
+@guarded
 async def request_human_handoff(
     reason: Annotated[str, "Why the patient or agent wants a human"],
 ) -> str:
     """Escalate to a human clinician for co-regulation / algorithm-aversion handoff."""
-    # Persist Moss session so the human can resume short-term context
+    # Persist Moss session so the human can resume short-term context. Best-effort, but a
+    # failure has to be visible: the handoff otherwise looks fine while the clinician
+    # receives none of the conversation.
+    context_warning = ""
     if _moss is not None and _session.get("encounter_id"):
-        try:
-            await _moss.push_session(_session["encounter_id"])
-        except Exception:
-            pass
+        pushed = await _moss.push_session(_session["encounter_id"])
+        if pushed is not None and not pushed.get("ok", True):
+            logger.warning("handoff context not persisted: %s", pushed.get("error"))
+            context_warning = (
+                "NOTE FOR THE CLINICIAN: short-term conversation context could not be "
+                f"persisted ({pushed.get('error')}). Re-read the chart before advising.\n"
+            )
+    lowered = (reason or "").lower()
+    if any(h in lowered for h in EMERGENCY_HINTS):
+        prefix = (
+            "EMERGENCY_ESCALATION\n"
+            'SAY THIS TO THE PATIENT FIRST, VERBATIM: "This needs emergency care right now '
+            '— call 911 or go to the nearest emergency department. Do not wait for this '
+            'check-in."\n'
+            "Do not run research, cost, or plan steps for this turn.\n"
+        )
+    elif any(h in lowered for h in URGENT_HINTS):
+        prefix = (
+            "URGENT_ESCALATION\n"
+            'SAY THIS TO THE PATIENT FIRST, VERBATIM: "This should be looked at today. '
+            "Please contact the clinic now, or go to urgent care if you can't reach them. "
+            'If it gets suddenly worse, or you get chest pain, call 911."\n'
+            "Do not run research, cost, or plan steps for this turn.\n"
+        )
+    else:
+        prefix = ""
     return (
+        f"{prefix}"
+        f"{context_warning}"
         "HUMAN_HANDOFF_REQUESTED\n"
         f"reason={reason}\n"
         f"patient_id={_session.get('patient_id')}\n"
@@ -191,17 +382,25 @@ async def request_human_handoff(
 
 
 @tool
+@guarded
 async def check_eligibility(
     service_hint: Annotated[
-        str, "What care step to price, e.g. urgent tele-dermatology"
-    ] = "urgent tele-dermatology",
+        str,
+        "The care step to price, e.g. 'specialist office visit', 'knee MRI', "
+        "'urgent tele-dermatology', 'physical therapy'",
+    ] = "specialist office visit",
 ) -> str:
-    """Run Stedi eligibility (test mode / mock). Returns active coverage + estimated copay."""
+    """Run Stedi eligibility. Returns active coverage + estimated out-of-pocket cost.
+
+    Call this whenever the patient asks about cost or coverage, and proactively before a
+    plan that involves imaging, a specialist, or therapy.
+    """
     assert _stedi is not None
     return await _stedi.check_text(service_hint)
 
 
 @tool
+@guarded
 async def get_wearable_risk(
     user_id: Annotated[
         str, "Open Wearables user id (Whoop/Oura/Fitbit connected). Empty = demo user."
@@ -217,6 +416,8 @@ TOOLS = [
     moss_search,
     ensure_patient,
     chart_to_medplum,
+    deep_research,
+    propose_care_plan,
     send_photo_capture_link,
     get_wearable_risk,
     check_eligibility,

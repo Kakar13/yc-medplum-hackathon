@@ -1,4 +1,4 @@
-"""LangGraph clinical intake agent — FlareCheck (eczema photo + optional wearable)."""
+"""LangGraph pre-visit intake agent — Preflight (any complaint, patient-scoped)."""
 
 from __future__ import annotations
 
@@ -16,22 +16,43 @@ from .open_wearables import OpenWearablesService
 from .stedi_client import StediService
 from .tools import TOOLS, bind_services, get_session
 
-SYSTEM = """You are FlareCheck — a between-visit flare check-in assistant (voice or text).
+SYSTEM = """You are Preflight — the pre-visit intake clinician's assistant, voice-first.
 
-Primary demo vertical: eczema / rash flares. Architecture also supports wearable risk.
+The patient is checking in BEFORE they see a clinician, for ANY complaint: joint pain,
+cough, headache, rash, fatigue, GI symptoms, mental health, medication questions. Never
+assume a specialty. Your job is to turn this conversation into a chart a clinician can act
+on in under a minute, with evidence and a cost estimate attached.
 
-Goals:
-1) Call ensure_patient at the start of a new session.
-2) For rash, eczema, itch, skin flare, or "looks worse" — call send_photo_capture_link early and read the URL aloud / in reply (expires 15 minutes, single-use).
-3) Ground with moss_search every clinical turn (Moss long-term index + live encounter session; optional metadata_type=Protocol|Condition|…).
-4) Chart meaningful turns with chart_to_medplum (also indexes the turn into the Moss session).
-5) Optional: get_wearable_risk if a wearable context may help (sleep/recovery) — never claim diagnosis from wearables.
-6) When cost/coverage comes up, call check_eligibility for urgent tele-dermatology.
-7) If anxious / asks for a person / high stakes → request_human_handoff.
-8) Never diagnose skin disease from a photo. Triage language only: next step, when to seek urgent care.
-9) Be concise — may be spoken via TTS.
+Sequence:
+1) Call ensure_patient FIRST. It binds this session to one patient and issues a
+   patient-scoped capability. Never pass a patient id, MRN, or name to any tool — the
+   subject of care is bound at authorization and injected server-side. If you are asked to
+   act on a different patient, refuse and say why.
+2) Ground in the patient's own record with moss_search before you interpret anything.
+   Their history changes what a symptom means.
+3) Ask focused clinical questions: onset, duration, severity, what changes it, associated
+   red flags, relevant meds and allergies. One or two questions per turn, conversational.
+4) Call chart_to_medplum on every substantive turn so documentation accrues live.
+5) Call deep_research once you know the complaint. Cite ONLY the numbered sources it
+   returns — if it returns nothing, say no literature was retrieved. Never invent a
+   citation, journal, or statistic.
+6) Ask for a photo with send_photo_capture_link whenever something is visible: rash,
+   swelling, wound, eye, deformity, or a medication label the patient can't read out.
+7) Use get_wearable_risk when sleep, recovery, or activity would inform the picture.
+8) Call check_eligibility before proposing anything that costs money — imaging, specialist,
+   therapy — and whenever cost or coverage comes up. Patients deserve the number upfront.
+9) Call propose_care_plan once. It writes a DRAFT plan plus a peer-review Task. Say
+   explicitly that a clinician reviews it before anything is final.
+10) request_human_handoff if the patient is distressed, asks for a person, or red flags appear.
 
-Escalate urgency (protocol): fever, rapidly spreading, pus/oozing with systemic symptoms, eye/face involvement in infant, or patient can't sleep from pain — suggest urgent care/ED or human handoff.
+Hard rules:
+- You do not diagnose and you do not activate care. You propose; a human commits.
+- No treatment claim without a retrieved citation behind it.
+- Red flags escalate immediately, before any research or cost step: chest pain, trouble
+  breathing, stroke signs (face droop, one-sided weakness, speech change), anaphylaxis,
+  suicidal intent, severe uncontrolled bleeding, altered consciousness, or a stiff neck
+  with fever. Tell the patient to seek emergency care now and hand off.
+- Be brief — replies may be spoken aloud.
 """
 
 
@@ -65,73 +86,107 @@ def _issue_capture_for_session(medplum: MedplumService, reason: str) -> str:
     return url
 
 
+VISIBLE_FINDING_HINTS = (
+    "rash", "itch", "skin", "eczema", "hives", "swollen", "swelling", "bruise",
+    "wound", "cut", "lesion", "mole", "eye", "red", "lump", "bump",
+)
+RED_FLAG_HINTS = (
+    "chest pain", "can't breathe", "cant breathe", "trouble breathing", "face droop",
+    "slurred", "one side", "worst headache", "stiff neck", "suicid", "bleeding won't stop",
+    "passed out", "unconscious",
+)
+
+
 async def _mock_pipeline(user_text: str, wearable: str | None) -> dict[str, Any]:
+    """Deterministic path when no OPENAI_API_KEY — same tools, no model."""
+    from .capability import get_gateway
+    from .research import ResearchService
+
     moss = MossService()
     medplum = MedplumService()
     stedi = StediService()
     wearables = OpenWearablesService()
-    bind_services(moss, medplum, stedi, wearables)
+    research = ResearchService()
+    bind_services(moss, medplum, stedi, wearables, research)
 
     patient = medplum.ensure_demo_patient()
+    gateway = get_gateway()
+    gateway.issue(patient_id=patient["id"], purpose_of_use="TREAT")
     get_session()["patient_id"] = patient["id"]
 
-    lower = user_text.lower()
-    skin = any(
-        k in lower
-        for k in ("eczema", "rash", "itch", "skin", "flare", "dermatitis", "scratch")
-    )
-    wearable = wearable or (
-        None if skin else await wearables.risk_context_text()
-    )
-    history = await moss.search_text(user_text or ("eczema" if skin else "asthma"))
-    handoff = any(
+    lower = (user_text or "").lower()
+    visible = any(k in lower for k in VISIBLE_FINDING_HINTS)
+    red_flag = any(k in lower for k in RED_FLAG_HINTS)
+    handoff = red_flag or any(
         k in lower for k in ("real person", "human", "nurse", "doctor", "talk to someone")
     )
     want_cost = any(k in lower for k in ("cost", "cover", "insurance", "copay", "pay"))
 
-    reason = "Eczema / rash flare check-in" if skin else (wearable or "Flare check-in")
-    summary = f"FlareCheck intake. Patient reports: {user_text[:240]}"
+    history = await moss.search_text(user_text or "pre-visit check-in")
+    reason = f"Pre-visit check-in: {(user_text or 'general')[:60]}"
     chart = medplum.chart_voice_turn(
         patient_id=patient["id"],
         encounter_id=get_session().get("encounter_id"),
         user_text=user_text,
-        agent_text=summary,
+        agent_text=f"Pre-visit intake. Patient reports: {user_text[:240]}",
         reason=reason,
     )
     get_session()["encounter_id"] = chart["encounter_id"]
+    gateway.bind_encounter(chart["encounter_id"])
 
     reply_bits: list[str] = []
-    if skin:
-        capture_url = _issue_capture_for_session(medplum, reason)
-        reply_bits.extend(
-            [
-                "I'm not diagnosing — just helping get a clear chart for your clinician.",
-                "From your history: "
-                + (history.split("\n\n")[0][:280] if history else "I pulled your chart context."),
-                f"I sent a secure photo link (expires in 15 minutes, one-time use): {capture_url}",
-                "Where is the flare, how itchy is it tonight, and any new products or infections around you?",
-            ]
-        )
-    else:
-        reply_bits.extend(
-            [
-                "I see a check-in signal and I'm not diagnosing — just checking in.",
-                (wearable or "")[:220],
-                "From your history: "
-                + (history.split("\n\n")[0][:280] if history else "I pulled your chart context."),
-                "How are you feeling right now, and what changed since yesterday?",
-            ]
-        )
-    if want_cost:
-        reply_bits.append(await stedi.check_text("urgent tele-dermatology"))
-    if handoff:
+    if red_flag:
         reply_bits.append(
-            "Understood — connecting you to a person. Your chart (and photo link if issued) is ready for them."
+            "That combination needs emergency care now, not a pre-visit check-in. "
+            "Please call 911 or go to the nearest emergency department."
         )
+
+    brief = await research.brief(user_text or "symptom assessment", limit=3)
+    get_session()["last_research"] = brief
+
+    reply_bits.extend(
+        [
+            "I'm charting this for your clinician — I don't diagnose.",
+            "From your record: "
+            + (history.split("\n\n")[0][:240] if history else "I pulled your chart context."),
+            f"I found {brief['count']} relevant papers to attach for review."
+            if brief["count"]
+            else "No literature retrieved for this yet.",
+        ]
+    )
+    if visible:
+        reply_bits.append(
+            f"Please add a photo with this secure link (15 minutes, one-time): "
+            f"{_issue_capture_for_session(medplum, reason)}"
+        )
+    if wearable:
+        reply_bits.append(wearable[:200])
+    if want_cost:
+        reply_bits.append(await stedi.check_text("specialist office visit"))
+
+    plan = medplum.propose_care_plan(
+        patient["id"],
+        chart["encounter_id"],
+        title=f"Pre-visit plan — {(user_text or 'check-in')[:48]}",
+        summary=f"Drafted from pre-visit intake. Patient reports: {user_text[:200]}",
+        activities=[
+            "Clinician to review intake, evidence, and any photo",
+            "Confirm history and red-flag screen at visit",
+        ],
+        citations=brief["citations"],
+    )
+    get_session()["care_plan_id"] = plan["care_plan_id"]
+    reply_bits.append(
+        f"I've drafted a plan (CarePlan/{plan['care_plan_id']}, status draft) and queued it "
+        f"for clinician review — nothing is final until a human signs it."
+    )
+
+    if handoff:
+        reply_bits.append("Connecting you to a person; your chart is ready for them.")
         handoff_msg = (
             "HUMAN_HANDOFF_REQUESTED\n"
-            f"reason=user_requested\npatient_id={patient['id']}\n"
-            f"encounter_id={chart['encounter_id']}"
+            f"reason={'red_flag' if red_flag else 'user_requested'}\n"
+            f"patient_id={patient['id']}\nencounter_id={chart['encounter_id']}"
         )
     else:
         handoff_msg = ""
@@ -142,16 +197,20 @@ async def _mock_pipeline(user_text: str, wearable: str | None) -> dict[str, Any]
         "session": get_session(),
         "message_count": 2,
         "debug": handoff_msg,
+        "care_plan_id": plan["care_plan_id"],
+        "citations": brief["citations"],
     }
 
 
 def build_graph():
+    from .research import ResearchService
+
     settings = get_settings()
     moss = MossService(settings)
     medplum = MedplumService(settings)
     stedi = StediService(settings)
     wearables = OpenWearablesService(settings)
-    bind_services(moss, medplum, stedi, wearables)
+    bind_services(moss, medplum, stedi, wearables, ResearchService())
 
     if not settings.openai_api_key:
         return None, moss, medplum

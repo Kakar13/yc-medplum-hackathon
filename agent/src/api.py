@@ -10,16 +10,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
+from .capability import get_gateway
 from .capture_links import get_capture_store
 from .config import get_settings
 from .graph import build_graph, run_turn
 from .medplum_client import MedplumService
 from .open_wearables import OpenWearablesService
 from .stedi_client import StediService
-from .tools import get_session
-from .whoop_client import WhoopClient, WhoopNotConnected
+from .tools import bind_session_patient, get_session
+from .whoop_client import WhoopClient, WhoopNotConnected, WhoopStateInvalid
 
-app = FastAPI(title="FlareCheck Agent", version="0.2.0")
+app = FastAPI(title="Preflight Agent", version="0.3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -73,12 +74,12 @@ async def health():
     s = get_settings()
     return {
         "ok": True,
-        "product": "FlareCheck",
+        "product": "Preflight",
         "agent_mode": s.agent_mode,
         "medplum_mode": "live" if not s.use_mock and s.medplum_client_id else "mock",
         "openai": bool(s.openai_api_key),
         "medplum": bool(s.medplum_client_id),
-        "moss": bool(s.moss_project_id),
+        "moss": bool(s.moss_project_id and s.moss_project_key),
         "deepgram": bool(s.deepgram_api_key),
         "stedi": bool(s.stedi_api_key),
         "open_wearables": bool(s.open_wearables_api_key),
@@ -97,12 +98,16 @@ async def start_session(body: StartSessionRequest):
     session = get_session()
     session["patient_id"] = patient["id"]
     session["encounter_id"] = enc["id"]
+    # Bind the capability here rather than inside a tool: the subject of care must not depend
+    # on the model electing to call something.
+    _, cap = bind_session_patient(medplum)
     out: dict[str, Any] = {
         "patient_id": patient["id"],
         "patient_display": medplum.patient_display(patient),
         "encounter_id": enc["id"],
         "mode": medplum.mode,
         "session": session,
+        "capability": cap.public(),
     }
     if body.message:
         agent = _get_agent()
@@ -145,8 +150,13 @@ async def whoop_callback(code: str | None = None, state: str | None = None, erro
         return RedirectResponse(f"{s.public_app_url}/?whoop=error&reason={error}")
     if not code:
         raise HTTPException(400, "Missing authorization code")
+    client = WhoopClient()
     try:
-        await WhoopClient().exchange_code(code)
+        client.consume_state(state)
+    except WhoopStateInvalid:
+        return RedirectResponse(f"{s.public_app_url}/?whoop=error&reason=state_mismatch")
+    try:
+        await client.exchange_code(code)
     except Exception as exc:  # noqa: BLE001 - show failure in the UI, not a stack trace
         return RedirectResponse(f"{s.public_app_url}/?whoop=error&reason={type(exc).__name__}")
     return RedirectResponse(f"{s.public_app_url}/?whoop=connected")
@@ -391,15 +401,110 @@ async def complete_capture(token: str, body: dict[str, Any] | None = None):
 
 @app.get("/chart/{encounter_id}")
 async def chart(encounter_id: str):
-    """Clinician BFF — Encounter + notes + photos (server credentials)."""
+    """Clinician BFF — Encounter + notes + photos + proposals (server credentials)."""
     medplum = _medplum()
     data = medplum.get_encounter_chart(encounter_id)
-    stedi = await StediService().check_text("urgent tele-dermatology")
-    data["eligibility"] = stedi
+    data["eligibility"] = await StediService().check_text("specialist office visit")
+    data["proposals"] = medplum.list_proposals(encounter_id=encounter_id)
+    data["research"] = (get_session().get("last_research") or {}).get("citations") or []
+    data["capability"] = (
+        get_gateway().active.public() if get_gateway().active else None
+    )
     data["handoff_hint"] = (
         "If patient requested a human, continue from this chart — do not restart intake."
     )
     return data
+
+
+@app.get("/capability")
+async def capability():
+    """The patient-scoped capability governing the current agent session."""
+    gateway = get_gateway()
+    cap = gateway.active
+    return {
+        "active": cap.public() if cap else None,
+        "enforcing": gateway.enforcing,
+        "stats": gateway.stats(),
+        "principle": (
+            "The subject of care is a property of authorization, never a tool argument."
+        ),
+    }
+
+
+@app.get("/audit")
+async def audit(limit: int = 100):
+    """Gateway decision ledger — every allow and deny, with the patient boundary."""
+    gateway = get_gateway()
+    return {"entries": list(reversed(gateway.ledger(limit))), "stats": gateway.stats()}
+
+
+@app.get("/review-queue")
+async def review_queue():
+    """Draft, AI-authored plans awaiting a human decision."""
+    return {"proposals": _medplum().list_proposals()}
+
+
+class ReviewDecision(BaseModel):
+    approve: bool = True
+    reviewer: str = "Dr. Reviewer"
+    note: str = ""
+
+
+@app.post("/review/{care_plan_id}")
+async def review(care_plan_id: str, body: ReviewDecision):
+    """Human commits or rejects an AI proposal — the only path to active care."""
+    result = _medplum().commit_care_plan(
+        care_plan_id,
+        reviewer=body.reviewer,
+        approve=body.approve,
+        note=body.note,
+    )
+    return result
+
+
+class RedTeamAttempt(BaseModel):
+    tool: str = "propose_care_plan"
+    args: dict[str, Any] = Field(
+        default_factory=lambda: {
+            "mrn": "SYN-003",
+            "medication": "metoprolol",
+            "dose": "25mg PO BID",
+        }
+    )
+
+
+@app.post("/red-team/attempt")
+async def red_team_attempt(body: RedTeamAttempt):
+    """Adjudicate an arbitrary tool call — the live wrong-patient demonstration.
+
+    Defaults to HAARF RT-4: an order naming SYN-003 while the session is bound elsewhere.
+    """
+    gateway = get_gateway()
+    cap = gateway.active
+    decision = gateway.adjudicate(body.tool, body.args)
+    return {
+        "bound_patient": cap.patient_id if cap else None,
+        "attempt": {"tool": body.tool, "args": body.args},
+        **decision.public(),
+        "referenced_patients": gateway.referenced_patients(body.args),
+        "stats": gateway.stats(),
+    }
+
+
+@app.get("/haarf/scorecard")
+async def haarf_scorecard():
+    """Red-team our gateway with HAARF RT-1..RT-6 and return the scorecard."""
+    import json
+    from pathlib import Path
+
+    cached = Path(__file__).resolve().parents[1] / "data" / "haarf_scorecard.json"
+    if cached.exists():
+        return json.loads(cached.read_text())
+    raise HTTPException(
+        404,
+        "No scorecard yet — run: python scripts/haarf_scorecard.py "
+        "--json data/haarf_scorecard.json",
+    )
 
 
 @app.get("/binary/{binary_id}")
