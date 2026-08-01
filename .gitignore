@@ -1,0 +1,12 @@
+.DS_Store
+.env
+**/.env
+.venv/
+**/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+
+# Vendor clone — run locally via docker compose (see agent/README)
+infra/open-wearables/

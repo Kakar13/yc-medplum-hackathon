@@ -1,0 +1,337 @@
+{
+  "resourceType": "Bundle",
+  "type": "transaction",
+  "meta": {
+    "tag": [
+      {
+        "system": "https://github.com/synthetichealth/synthea",
+        "code": "local-sample",
+        "display": "Hackathon sample shaped like Synthea FHIR R4 export"
+      }
+    ]
+  },
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:synthea-patient-jordan",
+      "resource": {
+        "resourceType": "Patient",
+        "id": "synthea-patient-jordan",
+        "meta": {
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"
+          ]
+        },
+        "text": {
+          "status": "generated",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\">Generated for hackathon demo (Synthea-shaped). Persistent asthma.</div>"
+        },
+        "identifier": [
+          {
+            "system": "https://github.com/synthetichealth/synthea",
+            "value": "synthea-patient-jordan"
+          },
+          {
+            "type": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                  "code": "MR"
+                }
+              ]
+            },
+            "system": "http://hospital.smarthealthit.org",
+            "value": "MRN-JOR-LEE-001"
+          }
+        ],
+        "name": [
+          {
+            "use": "official",
+            "family": "Lee",
+            "given": ["Jordan"]
+          }
+        ],
+        "telecom": [
+          { "system": "phone", "value": "555-555-0100", "use": "home" }
+        ],
+        "gender": "unknown",
+        "birthDate": "1992-04-12",
+        "address": [
+          {
+            "line": ["100 Demo Street"],
+            "city": "Boston",
+            "state": "MA",
+            "postalCode": "02115",
+            "country": "US"
+          }
+        ]
+      },
+      "request": { "method": "POST", "url": "Patient" }
+    },
+    {
+      "fullUrl": "urn:uuid:synthea-cond-asthma",
+      "resource": {
+        "resourceType": "Condition",
+        "id": "synthea-cond-asthma",
+        "clinicalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+              "code": "active"
+            }
+          ]
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+              "code": "confirmed"
+            }
+          ]
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                "code": "problem-list-item"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://hl7.org/fhir/sid/icd-10-cm",
+              "code": "J45.40",
+              "display": "Moderate persistent asthma, uncomplicated"
+            },
+            {
+              "system": "http://snomed.info/sct",
+              "code": "195967001",
+              "display": "Asthma"
+            }
+          ],
+          "text": "Moderate persistent asthma"
+        },
+        "subject": { "reference": "urn:uuid:synthea-patient-jordan" },
+        "onsetDateTime": "2019-06-01",
+        "recordedDate": "2019-06-15"
+      },
+      "request": { "method": "POST", "url": "Condition" }
+    },
+    {
+      "fullUrl": "urn:uuid:synthea-allergy-pcn",
+      "resource": {
+        "resourceType": "AllergyIntolerance",
+        "id": "synthea-allergy-pcn",
+        "clinicalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+              "code": "active"
+            }
+          ]
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+              "code": "confirmed"
+            }
+          ]
+        },
+        "type": "allergy",
+        "category": ["medication"],
+        "criticality": "low",
+        "code": {
+          "coding": [
+            {
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+              "code": "7980",
+              "display": "Penicillin"
+            }
+          ],
+          "text": "Penicillin"
+        },
+        "patient": { "reference": "urn:uuid:synthea-patient-jordan" },
+        "reaction": [
+          {
+            "manifestation": [{ "text": "Rash" }],
+            "severity": "mild"
+          }
+        ]
+      },
+      "request": { "method": "POST", "url": "AllergyIntolerance" }
+    },
+    {
+      "fullUrl": "urn:uuid:synthea-med-albuterol",
+      "resource": {
+        "resourceType": "MedicationRequest",
+        "id": "synthea-med-albuterol",
+        "status": "active",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+              "code": "2123111",
+              "display": "albuterol 0.09 MG/ACTUAT Metered Dose Inhaler"
+            }
+          ],
+          "text": "Albuterol sulfate HFA 90 mcg"
+        },
+        "subject": { "reference": "urn:uuid:synthea-patient-jordan" },
+        "authoredOn": "2024-01-10",
+        "dosageInstruction": [
+          {
+            "text": "2 puffs every 4-6 hours as needed for wheeze or shortness of breath",
+            "asNeededBoolean": true
+          }
+        ]
+      },
+      "request": { "method": "POST", "url": "MedicationRequest" }
+    },
+    {
+      "fullUrl": "urn:uuid:synthea-med-fluticasone",
+      "resource": {
+        "resourceType": "MedicationRequest",
+        "id": "synthea-med-fluticasone",
+        "status": "active",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+              "code": "896004",
+              "display": "fluticasone propionate 0.11 MG/ACTUAT Metered Dose Inhaler"
+            }
+          ],
+          "text": "Fluticasone propionate HFA"
+        },
+        "subject": { "reference": "urn:uuid:synthea-patient-jordan" },
+        "authoredOn": "2024-01-10",
+        "dosageInstruction": [
+          {
+            "text": "2 puffs twice daily",
+            "timing": { "repeat": { "frequency": 2, "period": 1, "periodUnit": "d" } }
+          }
+        ]
+      },
+      "request": { "method": "POST", "url": "MedicationRequest" }
+    },
+    {
+      "fullUrl": "urn:uuid:synthea-enc-ed-flare",
+      "resource": {
+        "resourceType": "Encounter",
+        "id": "synthea-enc-ed-flare",
+        "status": "finished",
+        "class": {
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+          "code": "EMER",
+          "display": "emergency"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "50849002",
+                "display": "Emergency room admission"
+              }
+            ]
+          }
+        ],
+        "subject": { "reference": "urn:uuid:synthea-patient-jordan" },
+        "period": {
+          "start": "2025-03-12T02:15:00-04:00",
+          "end": "2025-03-12T06:40:00-04:00"
+        },
+        "reasonCode": [
+          {
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "56018004",
+                "display": "Wheezing"
+              }
+            ],
+            "text": "Asthma exacerbation after viral URI"
+          }
+        ]
+      },
+      "request": { "method": "POST", "url": "Encounter" }
+    },
+    {
+      "fullUrl": "urn:uuid:synthea-obs-spo2",
+      "resource": {
+        "resourceType": "Observation",
+        "id": "synthea-obs-spo2",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "2708-6",
+              "display": "Oxygen saturation in Arterial blood"
+            }
+          ],
+          "text": "Oxygen saturation"
+        },
+        "subject": { "reference": "urn:uuid:synthea-patient-jordan" },
+        "encounter": { "reference": "urn:uuid:synthea-enc-ed-flare" },
+        "effectiveDateTime": "2025-03-12T02:30:00-04:00",
+        "valueQuantity": {
+          "value": 93,
+          "unit": "%",
+          "system": "http://unitsofmeasure.org",
+          "code": "%"
+        }
+      },
+      "request": { "method": "POST", "url": "Observation" }
+    },
+    {
+      "fullUrl": "urn:uuid:synthea-coverage",
+      "resource": {
+        "resourceType": "Coverage",
+        "id": "synthea-coverage",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+              "code": "HIP",
+              "display": "health insurance plan policy"
+            }
+          ]
+        },
+        "beneficiary": { "reference": "urn:uuid:synthea-patient-jordan" },
+        "payor": [{ "display": "UnitedHealthcare (synthetic)" }],
+        "class": [
+          {
+            "type": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/coverage-class",
+                  "code": "plan"
+                }
+              ]
+            },
+            "value": "UHC-COMMERCIAL-DEMO",
+            "name": "UnitedHealthcare commercial plan"
+          }
+        ]
+      },
+      "request": { "method": "POST", "url": "Coverage" }
+    }
+  ]
+}

@@ -24,7 +24,7 @@ When helping on this project:
 
 1. **Optimize for judging** — see criteria below. Prefer demos that improve patient care or clinician experience without adding workload.
 2. **Use sponsor tech** — Deepgram, Medplum, moss.dev, and/or Stedi should be first-class in the architecture, not bolted on.
-3. **Stay FHIR / standards-aware** — Medplum is FHIR-native; prefer real FHIR resources over ad-hoc schemas when storing clinical data.
+3. **Stay FHIR / standards-aware** — Medplum is FHIR-native; prefer real FHIR resources over ad-hoc schemas when storing clinical data. For wearables, prefer [Open Wearables](https://openwearables.io/docs) (Whoop/Oura/Fitbit/…) over per-vendor OAuth — see skill `open-wearables`.
 4. **Voice-first when it fits** — Deepgram for STT/TTS/voice agents; chart as the conversation happens.
 5. **Demo by 5:00pm PT** — submissions close then; keep scope shippable. Prefer a crisp vertical slice over unfinished breadth.
 6. **People's Choice** — post a YouTube demo video; views counted at 5:00pm when submissions close.
@@ -83,14 +83,24 @@ Help during the event: [Medplum Discord](https://discord.gg/medplum) → hackath
 - **Victor Wang** — Staff SWE, Deepgram (partner platform)
 - **Sri Raghu Malireddi** — Co-founder, Moss (YC F25)
 
-## Suggested build patterns
+## Canonical product (this team)
+
+Read **[docs/PRODUCT_BRIEF.md](../../../docs/PRODUCT_BRIEF.md)** before building. Summary:
+
+**Wearable risk → Deepgram voice → Moss history → Medplum FHIR chart → Stedi eligibility → human handoff** (algorithm aversion / co-regulation).
+
+- Do **not** claim predictive diagnosis; claim risk-triggered triage that frees data from the phone.
+- Mock wearables + rule-based risk for the hack; ship one vertical slice by 5:00pm.
+- Always offer human escalate; agent prepares the chart so handoff is warm.
+
+## Suggested build patterns (general)
 
 Map product ideas to sponsor tech:
 
 - **Voice intake / ambient charting** → Deepgram (STT) + Medplum (Encounter, Observation, DocumentReference / Composition)
 - **History-aware agent** → Medplum patient chart + moss.dev for fast retrieval into the agent loop
 - **Cost / coverage before visit** → Stedi eligibility + Medplum Coverage / ExplanationOfBenefit patterns
+- **Wearable-triggered outreach (our wedge)** → mock vitals → Deepgram call → Moss + Medplum → Stedi → human handoff
 - **n=1 plan + peer review** → Medplum CarePlan / ServiceRequest + review workflow; optional Deepgram voice Q&A
-- **Patient-facing viz** → Medplum data + clear UI; keep clinical write-path FHIR-correct
 
 Default bias: one compelling voice → FHIR → action loop that a clinician would trust, demoable live.

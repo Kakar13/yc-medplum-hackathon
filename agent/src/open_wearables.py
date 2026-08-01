@@ -1,0 +1,183 @@
+"""Open Wearables client — unified Whoop / Oura / Fitbit / Garmin / … risk signals.
+
+Docs: https://openwearables.io/docs/api-reference/introduction
+Auth: X-Open-Wearables-API-Key (not Bearer)
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
+import httpx
+
+from .config import Settings, get_settings
+
+# Lowercase provider path names per Open Wearables docs
+PROVIDERS = (
+    "whoop",
+    "oura",
+    "fitbit",
+    "garmin",
+    "polar",
+    "suunto",
+    "strava",
+    "ultrahuman",
+    "apple",
+)
+
+
+class OpenWearablesService:
+    def __init__(self, settings: Settings | None = None) -> None:
+        self.settings = settings or get_settings()
+        self.base = self.settings.open_wearables_base_url.rstrip("/")
+        if not self.base.endswith("/api/v1"):
+            # allow http://localhost:8000 or full …/api/v1
+            if self.base.endswith("/api"):
+                self.base = f"{self.base}/v1"
+            else:
+                self.base = f"{self.base}/api/v1"
+
+    @property
+    def use_mock(self) -> bool:
+        if self.settings.use_mock:
+            return True
+        return not bool(self.settings.open_wearables_api_key)
+
+    def _headers(self) -> dict[str, str]:
+        return {
+            "X-Open-Wearables-API-Key": self.settings.open_wearables_api_key,
+            "Accept": "application/json",
+        }
+
+    async def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
+        url = f"{self.base}{path}"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.get(url, headers=self._headers(), params=params)
+            r.raise_for_status()
+            return r.json()
+
+    async def list_providers(self) -> list[str]:
+        if self.use_mock:
+            return list(PROVIDERS)
+        data = await self._get("/oauth/providers")
+        if isinstance(data, list):
+            return [str(p.get("name") or p) for p in data]
+        items = data.get("items") or data.get("providers") or data.get("data") or []
+        return [str(p.get("name") or p) for p in items] or list(PROVIDERS)
+
+    async def authorize_url(self, provider: str, user_id: str, redirect_uri: str) -> dict[str, Any]:
+        provider = provider.lower()
+        if self.use_mock:
+            return {
+                "authorization_url": (
+                    f"https://mock.openwearables.local/oauth/{provider}"
+                    f"?user_id={user_id}&redirect_uri={redirect_uri}"
+                ),
+                "state": "mock-state",
+                "provider": provider,
+                "mode": "mock",
+            }
+        data = await self._get(
+            f"/oauth/{provider}/authorize",
+            params={"user_id": user_id, "redirect_uri": redirect_uri},
+        )
+        data["provider"] = provider
+        data["mode"] = "live"
+        return data
+
+    async def recovery_summary(self, user_id: str) -> Any:
+        if self.use_mock:
+            return {
+                "date": datetime.now(timezone.utc).date().isoformat(),
+                "source": {"provider": "whoop", "device": None},
+                "resting_heart_rate_bpm": 88,
+                "avg_hrv_sdnn_ms": 28.0,
+                "avg_spo2_percent": 96.0,
+                "recovery_score": 32,
+            }
+        return await self._get(f"/users/{user_id}/summaries/recovery")
+
+    async def sleep_summary(self, user_id: str) -> Any:
+        if self.use_mock:
+            return {
+                "date": datetime.now(timezone.utc).date().isoformat(),
+                "source": {"provider": "oura", "device": None},
+                "duration_minutes": 320,
+                "efficiency_percent": 78.0,
+                "avg_hrv_sdnn_ms": 30.0,
+                "avg_spo2_percent": 95.5,
+            }
+        return await self._get(f"/users/{user_id}/summaries/sleep")
+
+    def evaluate_risk(
+        self,
+        recovery: dict[str, Any] | None,
+        sleep: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Rule-based triage signal — not a diagnosis."""
+        recovery = recovery or {}
+        sleep = sleep or {}
+        reasons: list[str] = []
+        score = 0
+
+        rhr = recovery.get("resting_heart_rate_bpm")
+        hrv = recovery.get("avg_hrv_sdnn_ms") or sleep.get("avg_hrv_sdnn_ms")
+        rec = recovery.get("recovery_score")
+        sleep_min = sleep.get("duration_minutes")
+        provider = (recovery.get("source") or sleep.get("source") or {}).get("provider") or "unknown"
+
+        if isinstance(rhr, (int, float)) and rhr >= 85:
+            score += 2
+            reasons.append(f"elevated resting HR ({rhr} bpm)")
+        if isinstance(hrv, (int, float)) and hrv < 35:
+            score += 2
+            reasons.append(f"low HRV ({hrv})")
+        if isinstance(rec, (int, float)) and rec < 40:
+            score += 2
+            reasons.append(f"low recovery score ({rec})")
+        if isinstance(sleep_min, (int, float)) and sleep_min < 360:
+            score += 1
+            reasons.append(f"short sleep ({sleep_min} min)")
+
+        level = "high" if score >= 4 else "moderate" if score >= 2 else "low"
+        triggered = level in {"moderate", "high"}
+        context = (
+            f"Wearable risk signal ({level}) via Open Wearables / {provider}: "
+            + ("; ".join(reasons) if reasons else "within baseline")
+            + ". Not a diagnosis — consider history-aware voice check-in."
+        )
+        return {
+            "triggered": triggered,
+            "level": level,
+            "score": score,
+            "reasons": reasons,
+            "provider": provider,
+            "context": context,
+            "recovery": recovery,
+            "sleep": sleep,
+        }
+
+    async def risk_snapshot(self, user_id: str | None = None) -> dict[str, Any]:
+        uid = user_id or self.settings.open_wearables_user_id or "mock-user"
+        recovery = await self.recovery_summary(uid)
+        sleep = await self.sleep_summary(uid)
+        # Normalize list envelopes if API wraps data
+        if isinstance(recovery, dict) and "data" in recovery and isinstance(recovery["data"], list):
+            recovery = recovery["data"][0] if recovery["data"] else {}
+        if isinstance(sleep, dict) and "data" in sleep and isinstance(sleep["data"], list):
+            sleep = sleep["data"][0] if sleep["data"] else {}
+        out = self.evaluate_risk(
+            recovery if isinstance(recovery, dict) else {},
+            sleep if isinstance(sleep, dict) else {},
+        )
+        out["user_id"] = uid
+        out["mode"] = "mock" if self.use_mock else "live"
+        out["as_of"] = datetime.now(timezone.utc).isoformat()
+        # Lookback hint for demos
+        out["window_start"] = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+        return out
+
+    async def risk_context_text(self, user_id: str | None = None) -> str:
+        snap = await self.risk_snapshot(user_id)
+        return snap["context"]
