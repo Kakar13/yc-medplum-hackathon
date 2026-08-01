@@ -9,9 +9,12 @@ __pycache__/
 .mypy_cache/
 
 # Vendor clone — run locally via docker compose (see agent/README)
-infra/open-wearables/
+# The Medplum monorepo is 302MB — fetch it with ./scripts/bootstrap_vendor.sh instead.
+# haarf/ and open-wearables/ ARE committed; see infra/README.md for provenance.
 infra/medplum/
-infra/haarf/
+
+# Clone metadata moved aside so vendored trees commit as plain files, not gitlinks.
+.vendor-git-backup/
 
 # OAuth tokens + pending CSRF states for the connected Whoop strap — never commit
 agent/.whoop_tokens.json

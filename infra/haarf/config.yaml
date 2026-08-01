@@ -1,0 +1,12 @@
+# HAARF Evaluation Harness - Experiment Configuration
+#
+# Primary model: Gemini 2.5 Flash (cost-effective, demonstrates model-agnostic design)
+# Validation model: Claude Sonnet 4.6 (cross-model robustness check)
+#
+# Override at runtime:  python runner.py --model claude-sonnet-4-6 ...
+
+model: gemini-2.5-flash
+temperature: 0.0
+max_tokens: 4096
+max_turns: 10
+seed: 42

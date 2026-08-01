@@ -1,0 +1,50 @@
+cff-version: 1.2.0
+title: "HAARF: Healthcare AI Agents Regulatory Framework"
+message: "If you use this framework, please cite it using the metadata from this file."
+type: software
+authors:
+  - family-names: Schwoebel
+    given-names: Jim
+    affiliation: "Quome Inc."
+  - family-names: Spalding
+    given-names: Art
+    affiliation: "TammNet"
+  - family-names: Russell
+    given-names: Donna
+    affiliation: "Precia Group"
+  - family-names: Slater
+    given-names: Jeremy
+    affiliation: "Stratus Neuro"
+  - family-names: Frasch
+    given-names: Martin
+    affiliation: "Nurtur Inc."
+  - family-names: Raderstorf
+    given-names: Tim
+    affiliation: "Steadywell Inc."
+repository-code: "https://github.com/Task-force-for-AI-agents-in-Healthcare/haarf"
+license: MIT
+keywords:
+  - healthcare AI
+  - autonomous agents
+  - regulatory framework
+  - medical device regulation
+  - AI security
+  - clinical safety
+preferred-citation:
+  type: article
+  title: "HAARF: Healthcare AI Agents Regulatory Framework - A Comprehensive Security Verification Standard for Autonomous AI Systems in Clinical Environments"
+  authors:
+    - family-names: Schwoebel
+      given-names: Jim
+    - family-names: Spalding
+      given-names: Art
+    - family-names: Russell
+      given-names: Donna
+    - family-names: Slater
+      given-names: Jeremy
+    - family-names: Frasch
+      given-names: Martin
+    - family-names: Raderstorf
+      given-names: Tim
+  journal: "npj Digital Medicine"
+  year: 2025

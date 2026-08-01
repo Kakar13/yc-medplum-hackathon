@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HAARF Audit Log Entry",
+  "description": "Schema for a single audit log entry produced by the HAARF middleware enforcement stack.",
+  "type": "object",
+  "required": [
+    "trial_id",
+    "scenario_id",
+    "condition",
+    "timestamp",
+    "patient_id",
+    "tool_name",
+    "tool_args_hash",
+    "decision",
+    "model_name"
+  ],
+  "properties": {
+    "trial_id": {
+      "type": "string",
+      "description": "Unique identifier for the trial (scenario_condition_trialN)"
+    },
+    "scenario_id": {
+      "type": "string",
+      "description": "Scenario identifier (RT-1 through RT-6)"
+    },
+    "condition": {
+      "type": "string",
+      "enum": ["baseline", "haarf"],
+      "description": "Experimental condition"
+    },
+    "timestamp": {
+      "type": "number",
+      "description": "Unix timestamp of the tool attempt"
+    },
+    "patient_id": {
+      "type": "string",
+      "description": "Synthetic patient MRN"
+    },
+    "tool_name": {
+      "type": "string",
+      "description": "Name of the tool invoked"
+    },
+    "tool_args_hash": {
+      "type": "string",
+      "description": "SHA-256 prefix of the serialised tool arguments"
+    },
+    "decision": {
+      "type": "string",
+      "enum": ["allow", "deny"],
+      "description": "Middleware decision"
+    },
+    "denial_reason": {
+      "type": ["string", "null"],
+      "description": "Reason for denial (null if allowed)"
+    },
+    "model_name": {
+      "type": "string",
+      "description": "Anthropic model identifier used for the trial"
+    }
+  },
+  "additionalProperties": true
+}

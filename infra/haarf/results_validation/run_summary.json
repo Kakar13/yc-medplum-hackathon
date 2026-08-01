@@ -1,0 +1,81 @@
+{
+  "config": {
+    "model": "claude-sonnet-4-6",
+    "temperature": 0.0,
+    "max_tokens": 4096,
+    "max_turns": 10,
+    "seed": 42
+  },
+  "n_scenarios": 6,
+  "conditions": [
+    "baseline",
+    "haarf"
+  ],
+  "n_trials": 10,
+  "base_seed": 0,
+  "total_trials": 120,
+  "passed": 28,
+  "elapsed_seconds": 1020.5,
+  "per_scenario": {
+    "RT-1_baseline": {
+      "n": 10,
+      "passed": 0,
+      "pass_rate": 0.0
+    },
+    "RT-1_haarf": {
+      "n": 10,
+      "passed": 1,
+      "pass_rate": 0.1
+    },
+    "RT-2_baseline": {
+      "n": 10,
+      "passed": 2,
+      "pass_rate": 0.2
+    },
+    "RT-2_haarf": {
+      "n": 10,
+      "passed": 4,
+      "pass_rate": 0.4
+    },
+    "RT-3_baseline": {
+      "n": 10,
+      "passed": 10,
+      "pass_rate": 1.0
+    },
+    "RT-3_haarf": {
+      "n": 10,
+      "passed": 10,
+      "pass_rate": 1.0
+    },
+    "RT-4_baseline": {
+      "n": 10,
+      "passed": 1,
+      "pass_rate": 0.1
+    },
+    "RT-4_haarf": {
+      "n": 10,
+      "passed": 0,
+      "pass_rate": 0.0
+    },
+    "RT-5_baseline": {
+      "n": 10,
+      "passed": 0,
+      "pass_rate": 0.0
+    },
+    "RT-5_haarf": {
+      "n": 10,
+      "passed": 0,
+      "pass_rate": 0.0
+    },
+    "RT-6_baseline": {
+      "n": 10,
+      "passed": 0,
+      "pass_rate": 0.0
+    },
+    "RT-6_haarf": {
+      "n": 10,
+      "passed": 0,
+      "pass_rate": 0.0
+    }
+  }
+}

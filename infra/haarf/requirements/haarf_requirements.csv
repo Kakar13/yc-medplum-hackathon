@@ -1,0 +1,280 @@
+requirement_id,category,category_name,text,implementation_level,risk_level
+C1.1.1,C1,Unified Risk & Lifecycle Assessment,"Perform three-factor clinical risk assessment evaluating function type, autonomy level, and data sensitivity",Foundation,Critical
+C1.1.2,C1,Unified Risk & Lifecycle Assessment,Classify AI agent using SaMD risk framework based on healthcare decision state and situation severity,Foundation,Critical
+C1.1.3,C1,Unified Risk & Lifecycle Assessment,Conduct FDA 510(k) predicate analysis for substantial equivalence determination,Foundation,Critical
+C1.1.4,C1,Unified Risk & Lifecycle Assessment,Implement enhanced PCCP with clinical evidence requirements for model updates,Foundation,Critical
+C1.1.5,C1,Unified Risk & Lifecycle Assessment,Document risk assessment methodology including clinical function categorization,Foundation,High
+C1.2.1,C1,Unified Risk & Lifecycle Assessment,Evaluate patient population vulnerability factors in risk classification,Foundation,High
+C1.2.2,C1,Unified Risk & Lifecycle Assessment,Maintain risk assessment audit trail with version history and approval records,Foundation,High
+C1.2.3,C1,Unified Risk & Lifecycle Assessment,Perform periodic risk re-assessment at defined intervals or upon significant changes,Foundation,High
+C1.2.4,C1,Unified Risk & Lifecycle Assessment,Integrate risk classification with regulatory submission pathway selection,Foundation,High
+C1.2.5,C1,Unified Risk & Lifecycle Assessment,Document risk mitigation strategies with residual risk acceptance criteria,Advanced,High
+C1.3.1,C1,Unified Risk & Lifecycle Assessment,"Assess data sensitivity classification for PHI, genomic, and behavioral health data",Advanced,High
+C1.3.2,C1,Unified Risk & Lifecycle Assessment,Map risk levels to implementation requirements across all verification categories,Advanced,High
+C1.3.3,C1,Unified Risk & Lifecycle Assessment,Evaluate multi-system integration risks for agents accessing multiple clinical tools,Advanced,High
+C1.3.4,C1,Unified Risk & Lifecycle Assessment,Conduct pre-deployment risk validation with clinical stakeholder review,Advanced,High
+C1.3.5,C1,Unified Risk & Lifecycle Assessment,Document risk-benefit analysis for autonomous decision-making capabilities,Advanced,High
+C1.4.1,C1,Unified Risk & Lifecycle Assessment,Implement risk-based monitoring frequency aligned with clinical impact severity,Advanced,High
+C1.4.2,C1,Unified Risk & Lifecycle Assessment,Assess regulatory pathway implications of risk classification changes,Advanced,High
+C1.4.3,C1,Unified Risk & Lifecycle Assessment,"Maintain risk register with identified threats, likelihood, and impact assessments",Advanced,Medium
+C1.4.4,C1,Unified Risk & Lifecycle Assessment,Evaluate organizational readiness for managing identified risk levels,Advanced,Medium
+C1.4.5,C1,Unified Risk & Lifecycle Assessment,Document risk communication protocols for clinical and technical stakeholders,Advanced,Medium
+C1.5.1,C1,Unified Risk & Lifecycle Assessment,Implement automated risk indicator monitoring with threshold alerting,Advanced,Medium
+C1.5.2,C1,Unified Risk & Lifecycle Assessment,Assess third-party component risks in the AI agent supply chain,Advanced,Medium
+C1.5.3,C1,Unified Risk & Lifecycle Assessment,Conduct risk assessment for multi-agent coordination scenarios,Advanced,Medium
+C1.5.4,C1,Unified Risk & Lifecycle Assessment,Evaluate risks of continuous learning and model drift on clinical safety,Advanced,Medium
+C1.5.5,C1,Unified Risk & Lifecycle Assessment,Document emergency risk escalation procedures and response protocols,Advanced,Medium
+C1.6.1,C1,Unified Risk & Lifecycle Assessment,Implement risk-based access control aligned with clinical authorization levels,Expert,High
+C1.6.2,C1,Unified Risk & Lifecycle Assessment,Assess cross-jurisdictional regulatory risk for multi-market deployment,Expert,High
+C1.6.3,C1,Unified Risk & Lifecycle Assessment,Maintain lifecycle risk documentation from development through decommissioning,Expert,High
+C1.6.4,C1,Unified Risk & Lifecycle Assessment,Evaluate risks associated with clinical workflow disruption during deployment,Expert,High
+C1.6.5,C1,Unified Risk & Lifecycle Assessment,Conduct post-market risk surveillance with adverse event tracking,Expert,High
+C2.1.1,C2,AI Model Passport & Traceability,Maintain complete data lineage tracking with provenance documentation,Foundation,Critical
+C2.1.2,C2,AI Model Passport & Traceability,"Document model architecture, training methodology, and hyperparameter selection",Foundation,Critical
+C2.1.3,C2,AI Model Passport & Traceability,Record all model updates with change justification and clinical validation results,Foundation,Critical
+C2.1.4,C2,AI Model Passport & Traceability,Implement machine-interpretable compliance documentation for automated verification,Foundation,Critical
+C2.1.5,C2,AI Model Passport & Traceability,Track training data diversity metrics aligned with Health Canada SGBA+ requirements,Foundation,Critical
+C2.1.6,C2,AI Model Passport & Traceability,Document algorithm selection rationale with comparative performance evidence,Foundation,High
+C2.2.1,C2,AI Model Passport & Traceability,Maintain model version control with rollback capability documentation,Foundation,High
+C2.2.2,C2,AI Model Passport & Traceability,Record clinical validation results for each model version with statistical methods,Foundation,High
+C2.2.3,C2,AI Model Passport & Traceability,Implement decision lineage tracking for every agent action and recommendation,Foundation,High
+C2.2.4,C2,AI Model Passport & Traceability,Document feature importance and model interpretability analysis results,Foundation,High
+C2.2.5,C2,AI Model Passport & Traceability,Track model performance degradation indicators with drift detection metrics,Advanced,High
+C2.2.6,C2,AI Model Passport & Traceability,Maintain audit trail of all model access and modification events,Advanced,High
+C2.3.1,C2,AI Model Passport & Traceability,Document data preprocessing steps and transformation pipeline specifications,Advanced,High
+C2.3.2,C2,AI Model Passport & Traceability,Record external data source dependencies and integration specifications,Advanced,High
+C2.3.3,C2,AI Model Passport & Traceability,Implement automated model passport generation for regulatory submissions,Advanced,High
+C2.3.4,C2,AI Model Passport & Traceability,"Track data quality metrics including completeness, accuracy, and timeliness",Advanced,High
+C2.3.5,C2,AI Model Passport & Traceability,Document model testing methodology including adversarial testing protocols,Advanced,High
+C2.3.6,C2,AI Model Passport & Traceability,Maintain clinical endpoint mapping between model outputs and care decisions,Advanced,High
+C2.4.1,C2,AI Model Passport & Traceability,Record bias assessment results at each lifecycle stage with mitigation actions,Advanced,High
+C2.4.2,C2,AI Model Passport & Traceability,Document model deployment configuration and environment specifications,Advanced,Medium
+C2.4.3,C2,AI Model Passport & Traceability,Implement continuous performance monitoring with clinical outcome correlation,Advanced,Medium
+C2.4.4,C2,AI Model Passport & Traceability,Track model uncertainty quantification and calibration metrics,Advanced,Medium
+C2.4.5,C2,AI Model Passport & Traceability,Document patient consent and data usage authorization records,Advanced,Medium
+C2.4.6,C2,AI Model Passport & Traceability,Maintain regulatory correspondence and submission status tracking,Advanced,Medium
+C2.5.1,C2,AI Model Passport & Traceability,Record clinical expert review and approval decisions with timestamps,Advanced,Medium
+C2.5.2,C2,AI Model Passport & Traceability,Document model decommissioning criteria and data retention policies,Advanced,Medium
+C2.5.3,C2,AI Model Passport & Traceability,Implement provenance verification for all training and validation datasets,Advanced,Medium
+C2.5.4,C2,AI Model Passport & Traceability,Track model explanation generation accuracy and clinical relevance metrics,Advanced,Medium
+C2.5.5,C2,AI Model Passport & Traceability,Document A/B testing and comparative effectiveness study results,Expert,High
+C2.5.6,C2,AI Model Passport & Traceability,Maintain stakeholder notification records for model changes affecting care,Expert,High
+C2.6.1,C2,AI Model Passport & Traceability,Record model failure analysis reports with root cause and corrective actions,Expert,High
+C2.6.2,C2,AI Model Passport & Traceability,Document compliance mapping between model capabilities and regulatory requirements,Expert,High
+C2.6.3,C2,AI Model Passport & Traceability,Implement real-time model health dashboard with key performance indicators,Expert,High
+C2.6.4,C2,AI Model Passport & Traceability,Track regulatory milestone completion and submission readiness metrics,Expert,High
+C3.1.1,C3,Proactive Cybersecurity Framework,Implement healthcare-specific adversarial robustness testing against clinical data manipulation,Foundation,Critical
+C3.1.2,C3,Proactive Cybersecurity Framework,Conduct medical AI supply chain security vetting for all model components and dependencies,Foundation,Critical
+C3.1.3,C3,Proactive Cybersecurity Framework,Deploy real-time clinical threat monitoring integrated with healthcare security operations,Foundation,Critical
+C3.1.4,C3,Proactive Cybersecurity Framework,Perform healthcare penetration testing with clinical scenario simulation and attack surface analysis,Foundation,Critical
+C3.1.5,C3,Proactive Cybersecurity Framework,Implement prompt injection detection and sanitization for healthcare-targeted injection patterns,Foundation,Critical
+C3.1.6,C3,Proactive Cybersecurity Framework,Deploy network segmentation isolating AI agent communications from general hospital traffic,Foundation,High
+C3.2.1,C3,Proactive Cybersecurity Framework,"Implement cryptographic protection for model weights, parameters, and configuration data",Foundation,High
+C3.2.2,C3,Proactive Cybersecurity Framework,Conduct regular vulnerability scanning of AI agent infrastructure and dependencies,Foundation,High
+C3.2.3,C3,Proactive Cybersecurity Framework,Deploy intrusion detection systems tuned for healthcare AI-specific attack patterns,Foundation,High
+C3.2.4,C3,Proactive Cybersecurity Framework,Implement secure model serving with authentication and encryption for inference requests,Foundation,High
+C3.2.5,C3,Proactive Cybersecurity Framework,Conduct adversarial testing against medical imaging manipulation and clinical data poisoning,Foundation,High
+C3.2.6,C3,Proactive Cybersecurity Framework,Deploy API security controls with rate limiting and anomaly detection for agent endpoints,Advanced,High
+C3.3.1,C3,Proactive Cybersecurity Framework,Implement secure logging and tamper-evident audit trails for all security events,Advanced,High
+C3.3.2,C3,Proactive Cybersecurity Framework,Conduct third-party security assessments of AI agent components and integrations,Advanced,High
+C3.3.3,C3,Proactive Cybersecurity Framework,Deploy data loss prevention controls for PHI exposure through agent interactions,Advanced,High
+C3.3.4,C3,Proactive Cybersecurity Framework,Implement secure update mechanisms with integrity verification for model deployments,Advanced,High
+C3.3.5,C3,Proactive Cybersecurity Framework,Conduct social engineering resistance testing for clinical workflow manipulation attempts,Advanced,High
+C3.3.6,C3,Proactive Cybersecurity Framework,Deploy runtime application self-protection for AI agent execution environments,Advanced,High
+C3.4.1,C3,Proactive Cybersecurity Framework,Implement secure credential management for healthcare system authentication tokens,Advanced,High
+C3.4.2,C3,Proactive Cybersecurity Framework,Conduct security impact analysis for proposed model changes and updates,Advanced,High
+C3.4.3,C3,Proactive Cybersecurity Framework,Deploy incident response procedures specific to healthcare AI security events,Advanced,Medium
+C3.4.4,C3,Proactive Cybersecurity Framework,Implement secure multi-tenancy controls for shared AI agent infrastructure,Advanced,Medium
+C3.4.5,C3,Proactive Cybersecurity Framework,Conduct privacy impact assessment for agent data processing and storage activities,Advanced,Medium
+C3.4.6,C3,Proactive Cybersecurity Framework,Deploy backup and recovery procedures for AI agent state and clinical context,Advanced,Medium
+C3.5.1,C3,Proactive Cybersecurity Framework,Implement secure communication channels between multi-agent systems,Advanced,Medium
+C3.5.2,C3,Proactive Cybersecurity Framework,"Conduct compliance validation against HIPAA, GDPR, and healthcare privacy regulations",Advanced,Medium
+C3.5.3,C3,Proactive Cybersecurity Framework,Deploy certificate management and PKI infrastructure for agent identity verification,Advanced,Medium
+C3.5.4,C3,Proactive Cybersecurity Framework,Implement secure configuration management with baseline enforcement and drift detection,Advanced,Medium
+C3.5.5,C3,Proactive Cybersecurity Framework,Conduct security awareness training specific to healthcare AI system operations,Advanced,Medium
+C3.5.6,C3,Proactive Cybersecurity Framework,Deploy security event correlation and automated threat intelligence integration,Expert,High
+C3.6.1,C3,Proactive Cybersecurity Framework,Implement secure development lifecycle practices for AI agent code and models,Expert,High
+C3.6.2,C3,Proactive Cybersecurity Framework,Conduct tabletop exercises for healthcare AI security incident scenarios,Expert,High
+C3.6.3,C3,Proactive Cybersecurity Framework,Deploy endpoint security controls for AI agent host systems and containers,Expert,High
+C3.6.4,C3,Proactive Cybersecurity Framework,Implement data classification and handling procedures aligned with clinical sensitivity,Expert,High
+C3.6.5,C3,Proactive Cybersecurity Framework,Conduct post-incident forensic analysis capabilities for AI agent security events,Expert,High
+C4.1.1,C4,Human Oversight & Integration,Define clinical accountability frameworks preserving healthcare professional authority,Foundation,Critical
+C4.1.2,C4,Human Oversight & Integration,Implement human factors engineering standards adapted for AI agent interfaces,Foundation,Critical
+C4.1.3,C4,Human Oversight & Integration,Establish clinical decision validation requirements with human override capabilities,Foundation,Critical
+C4.1.4,C4,Human Oversight & Integration,Design patient communication frameworks for AI involvement transparency and consent,Foundation,Critical
+C4.1.5,C4,Human Oversight & Integration,Implement mandatory human review gates for high-risk autonomous decisions,Foundation,Critical
+C4.1.6,C4,Human Oversight & Integration,Define escalation pathways for clinical situations exceeding agent authority boundaries,Foundation,Critical
+C4.1.7,C4,Human Oversight & Integration,Establish competency requirements for clinicians supervising AI agent operations,Foundation,High
+C4.2.1,C4,Human Oversight & Integration,Implement alert fatigue mitigation strategies for human oversight notifications,Foundation,High
+C4.2.2,C4,Human Oversight & Integration,Design emergency override mechanisms with immediate agent suspension capability,Foundation,High
+C4.2.3,C4,Human Oversight & Integration,Define shared responsibility models between AI agents and clinical professionals,Foundation,High
+C4.2.4,C4,Human Oversight & Integration,Implement continuous monitoring dashboards for human oversight of agent activities,Foundation,High
+C4.2.5,C4,Human Oversight & Integration,Establish patient consent protocols for autonomous AI agent involvement in care,Foundation,High
+C4.2.6,C4,Human Oversight & Integration,Design feedback mechanisms for clinicians to report agent performance concerns,Advanced,High
+C4.2.7,C4,Human Oversight & Integration,Implement time-bound decision windows requiring human confirmation for critical actions,Advanced,High
+C4.3.1,C4,Human Oversight & Integration,Define delegation rules specifying which decisions require human vs agent authority,Advanced,High
+C4.3.2,C4,Human Oversight & Integration,Establish training programs for clinical staff on AI agent oversight responsibilities,Advanced,High
+C4.3.3,C4,Human Oversight & Integration,Implement audit mechanisms tracking human override frequency and reasoning,Advanced,High
+C4.3.4,C4,Human Oversight & Integration,Design workflow integration minimizing clinical disruption from oversight requirements,Advanced,High
+C4.3.5,C4,Human Oversight & Integration,Define quality assurance processes for human-AI collaborative decision-making,Advanced,High
+C4.3.6,C4,Human Oversight & Integration,Establish incident reporting procedures for AI agent errors or near-misses,Advanced,High
+C4.3.7,C4,Human Oversight & Integration,Implement transparency requirements for agent reasoning visible to supervising clinicians,Advanced,High
+C4.4.1,C4,Human Oversight & Integration,Design graceful degradation pathways when human oversight is temporarily unavailable,Advanced,Medium
+C4.4.2,C4,Human Oversight & Integration,Define performance metrics for human-AI team effectiveness in clinical settings,Advanced,Medium
+C4.4.3,C4,Human Oversight & Integration,Establish patient rights to request human-only care without AI agent involvement,Advanced,Medium
+C4.4.4,C4,Human Oversight & Integration,Implement handoff protocols for transitioning between autonomous and supervised modes,Advanced,Medium
+C4.4.5,C4,Human Oversight & Integration,Design cognitive load optimization for clinician oversight interface presentations,Advanced,Medium
+C4.4.6,C4,Human Oversight & Integration,Define liability frameworks for adverse events involving AI agent decisions,Advanced,Medium
+C4.4.7,C4,Human Oversight & Integration,Establish regular review cycles for human oversight effectiveness assessment,Advanced,Medium
+C4.5.1,C4,Human Oversight & Integration,Implement patient notification systems for AI agent involvement in their care,Advanced,Medium
+C4.5.2,C4,Human Oversight & Integration,Design multi-disciplinary oversight committees for AI agent governance,Advanced,Medium
+C4.5.3,C4,Human Oversight & Integration,Define minimum oversight ratios for different agent autonomy levels,Advanced,Medium
+C4.5.4,C4,Human Oversight & Integration,Establish documentation requirements for all human override decisions,Expert,High
+C4.5.5,C4,Human Oversight & Integration,Implement contextual awareness indicators helping clinicians assess agent confidence,Expert,High
+C4.5.6,C4,Human Oversight & Integration,Design cross-institutional oversight standards for AI agents used across facilities,Expert,High
+C4.5.7,C4,Human Oversight & Integration,Define patient advocacy mechanisms within AI agent governance structures,Expert,High
+C4.6.1,C4,Human Oversight & Integration,Establish cultural competency requirements for AI agent clinical communications,Expert,High
+C4.6.2,C4,Human Oversight & Integration,Implement shift handoff procedures for AI agent oversight continuity,Expert,High
+C4.6.3,C4,Human Oversight & Integration,Design accessibility standards ensuring oversight interfaces serve all clinicians,Expert,High
+C5.1.1,C5,Agent Registration & Identity Management,Implement centralized healthcare agent registry integrated with device management systems,Foundation,Critical
+C5.1.2,C5,Agent Registration & Identity Management,Establish clinical identity and access management with appropriateness validation,Foundation,Critical
+C5.1.3,C5,Agent Registration & Identity Management,Deploy behavioral monitoring with anomaly detection tuned for clinical environments,Foundation,Critical
+C5.1.4,C5,Agent Registration & Identity Management,Implement complete lifecycle tracking from agent deployment through decommissioning,Foundation,Critical
+C5.1.5,C5,Agent Registration & Identity Management,Define unique agent identification standards compatible with medical device registries,Foundation,High
+C5.2.1,C5,Agent Registration & Identity Management,Establish agent capability declarations specifying authorized clinical functions,Foundation,High
+C5.2.2,C5,Agent Registration & Identity Management,Deploy agent authentication protocols for healthcare system integration points,Foundation,High
+C5.2.3,C5,Agent Registration & Identity Management,Implement agent version tracking with deployment history and configuration records,Foundation,High
+C5.2.4,C5,Agent Registration & Identity Management,Define agent deactivation procedures with clinical continuity safeguards,Foundation,High
+C5.2.5,C5,Agent Registration & Identity Management,Establish agent performance benchmarking standards for registry qualification,Advanced,High
+C5.3.1,C5,Agent Registration & Identity Management,Deploy real-time agent status monitoring with health check and availability tracking,Advanced,High
+C5.3.2,C5,Agent Registration & Identity Management,Implement agent access auditing for all healthcare system interactions,Advanced,High
+C5.3.3,C5,Agent Registration & Identity Management,Define agent migration procedures for system upgrades and platform changes,Advanced,High
+C5.3.4,C5,Agent Registration & Identity Management,Establish agent certification requirements aligned with medical device standards,Advanced,High
+C5.3.5,C5,Agent Registration & Identity Management,Deploy agent dependency tracking for third-party service and model components,Advanced,High
+C5.4.1,C5,Agent Registration & Identity Management,Implement agent communication logging for inter-system message tracing,Advanced,High
+C5.4.2,C5,Agent Registration & Identity Management,Define agent scope limitations enforced through technical access controls,Advanced,High
+C5.4.3,C5,Agent Registration & Identity Management,Establish agent onboarding procedures with clinical validation requirements,Advanced,Medium
+C5.4.4,C5,Agent Registration & Identity Management,Deploy agent risk scoring based on authorized capabilities and access levels,Advanced,Medium
+C5.4.5,C5,Agent Registration & Identity Management,Implement agent incident association for tracking failures to specific deployments,Advanced,Medium
+C5.5.1,C5,Agent Registration & Identity Management,Define multi-agent coordination registry for systems with collaborative agents,Advanced,Medium
+C5.5.2,C5,Agent Registration & Identity Management,Establish agent regulatory mapping linking registrations to compliance requirements,Advanced,Medium
+C5.5.3,C5,Agent Registration & Identity Management,Deploy agent inventory reconciliation verifying registry accuracy periodically,Advanced,Medium
+C5.5.4,C5,Agent Registration & Identity Management,Implement agent privilege escalation controls with approval workflows,Advanced,Medium
+C5.5.5,C5,Agent Registration & Identity Management,Define agent metadata standards for interoperability across healthcare systems,Advanced,Medium
+C5.6.1,C5,Agent Registration & Identity Management,Establish agent retirement procedures with data preservation requirements,Expert,High
+C5.6.2,C5,Agent Registration & Identity Management,Deploy agent behavioral baseline establishment for anomaly detection calibration,Expert,High
+C5.6.3,C5,Agent Registration & Identity Management,Implement agent capability restriction mechanisms for emergency situations,Expert,High
+C5.6.4,C5,Agent Registration & Identity Management,Define agent cross-facility authorization for multi-site healthcare deployments,Expert,High
+C5.6.5,C5,Agent Registration & Identity Management,Establish agent compliance dashboard with real-time regulatory status tracking,Expert,High
+C6.1.1,C6,Autonomy Governance & Control,Define standardized autonomy level classification from co-pilot to fully autonomous,Foundation,Critical
+C6.1.2,C6,Autonomy Governance & Control,Establish progressive implementation gates with clinical validation evidence requirements,Foundation,Critical
+C6.1.3,C6,Autonomy Governance & Control,Define authority boundaries with clear decision limits and emergency override capabilities,Foundation,Critical
+C6.1.4,C6,Autonomy Governance & Control,Implement multi-agent coordination governance for collaborative autonomous systems,Foundation,Critical
+C6.1.5,C6,Autonomy Governance & Control,Define autonomy advancement criteria based on clinical safety evidence accumulation,Foundation,Critical
+C6.1.6,C6,Autonomy Governance & Control,Establish autonomy reduction procedures for degraded performance or safety concerns,Foundation,High
+C6.2.1,C6,Autonomy Governance & Control,Implement context-dependent autonomy adjustment based on clinical scenario complexity,Foundation,High
+C6.2.2,C6,Autonomy Governance & Control,Define maximum autonomy limits per clinical domain based on risk classification,Foundation,High
+C6.2.3,C6,Autonomy Governance & Control,Establish autonomy governance committees with multi-stakeholder representation,Foundation,High
+C6.2.4,C6,Autonomy Governance & Control,Implement automated autonomy compliance monitoring with level violation detection,Foundation,High
+C6.2.5,C6,Autonomy Governance & Control,Define autonomy inheritance rules for derived or updated agent deployments,Foundation,High
+C6.2.6,C6,Autonomy Governance & Control,Establish evidence standards for each autonomy level advancement step,Advanced,High
+C6.3.1,C6,Autonomy Governance & Control,Implement autonomy simulation testing before advancing to higher operational levels,Advanced,High
+C6.3.2,C6,Autonomy Governance & Control,Define autonomy rollback procedures with clinical impact assessment protocols,Advanced,High
+C6.3.3,C6,Autonomy Governance & Control,Establish patient population-specific autonomy limits for vulnerable groups,Advanced,High
+C6.3.4,C6,Autonomy Governance & Control,Implement time-of-day autonomy adjustments for staffing-dependent oversight availability,Advanced,High
+C6.3.5,C6,Autonomy Governance & Control,Define autonomy documentation requirements tracking operational mode changes,Advanced,High
+C6.3.6,C6,Autonomy Governance & Control,Establish peer review processes for autonomy level advancement decisions,Advanced,High
+C6.4.1,C6,Autonomy Governance & Control,Implement autonomy level enforcement through technical controls preventing escalation,Advanced,High
+C6.4.2,C6,Autonomy Governance & Control,Define multi-jurisdictional autonomy harmonization for cross-border deployments,Advanced,High
+C6.4.3,C6,Autonomy Governance & Control,Establish autonomy performance metrics correlating level with clinical outcomes,Advanced,Medium
+C6.4.4,C6,Autonomy Governance & Control,Implement dynamic autonomy assessment based on real-time clinical context factors,Advanced,Medium
+C6.4.5,C6,Autonomy Governance & Control,Define autonomy certification standards for third-party validation bodies,Advanced,Medium
+C6.4.6,C6,Autonomy Governance & Control,Establish autonomy communication protocols informing stakeholders of level changes,Advanced,Medium
+C6.5.1,C6,Autonomy Governance & Control,Implement autonomy testing frameworks for each defined operational level,Advanced,Medium
+C6.5.2,C6,Autonomy Governance & Control,Define emergency autonomy protocols for crisis situations requiring rapid adjustment,Advanced,Medium
+C6.5.3,C6,Autonomy Governance & Control,Establish autonomy level transparency requirements for patient communication,Advanced,Medium
+C6.5.4,C6,Autonomy Governance & Control,Implement autonomy governance audit trails with decision rationale documentation,Advanced,Medium
+C6.5.5,C6,Autonomy Governance & Control,Define collaborative autonomy frameworks for human-AI shared decision-making,Advanced,Medium
+C6.5.6,C6,Autonomy Governance & Control,Establish continuous autonomy monitoring with automated safety boundary enforcement,Expert,High
+C6.6.1,C6,Autonomy Governance & Control,Implement autonomy level comparison benchmarking across similar clinical applications,Expert,High
+C6.6.2,C6,Autonomy Governance & Control,Define autonomy risk mapping linking operational levels to safety impact assessments,Expert,High
+C6.6.3,C6,Autonomy Governance & Control,Establish autonomy training requirements for clinical staff at each operational level,Expert,High
+C6.6.4,C6,Autonomy Governance & Control,Implement predictive autonomy assessment using historical performance data analysis,Expert,High
+C6.6.5,C6,Autonomy Governance & Control,Define autonomy accountability frameworks clarifying liability at each operational level,Expert,High
+C7.1.1,C7,Bias Mitigation & Population Equity,Implement comprehensive training data representativeness requirements beyond demographic parity,Foundation,Critical
+C7.1.2,C7,Bias Mitigation & Population Equity,Conduct intersectional fairness assessment across multiple demographic characteristics,Foundation,Critical
+C7.1.3,C7,Bias Mitigation & Population Equity,"Establish enhanced safeguards for pediatric, elderly, and at-risk patient populations",Foundation,Critical
+C7.1.4,C7,Bias Mitigation & Population Equity,Address global health equity considerations for resource-limited healthcare settings,Foundation,Critical
+C7.1.5,C7,Bias Mitigation & Population Equity,"Define multi-metric fairness evaluation including accuracy, calibration, and error disparity",Foundation,Critical
+C7.1.6,C7,Bias Mitigation & Population Equity,Implement subgroup performance analysis for clinically relevant patient categories,Foundation,High
+C7.2.1,C7,Bias Mitigation & Population Equity,Establish fairness benchmarks calibrated to clinically relevant thresholds,Foundation,High
+C7.2.2,C7,Bias Mitigation & Population Equity,Deploy continuous equity monitoring with automated disparity detection alerting,Foundation,High
+C7.2.3,C7,Bias Mitigation & Population Equity,Implement representative validation datasets reflecting target patient populations,Foundation,High
+C7.2.4,C7,Bias Mitigation & Population Equity,Define disparate impact assessment procedures for agent clinical recommendations,Foundation,High
+C7.2.5,C7,Bias Mitigation & Population Equity,Establish corrective action protocols when bias exceeds defined clinical thresholds,Foundation,High
+C7.2.6,C7,Bias Mitigation & Population Equity,Implement accessibility compliance for agent interfaces serving diverse patient populations,Advanced,High
+C7.3.1,C7,Bias Mitigation & Population Equity,Define language inclusivity requirements for multilingual healthcare environments,Advanced,High
+C7.3.2,C7,Bias Mitigation & Population Equity,Establish socioeconomic bias assessment for treatment recommendation algorithms,Advanced,High
+C7.3.3,C7,Bias Mitigation & Population Equity,Implement geographic equity analysis for agent performance across care settings,Advanced,High
+C7.3.4,C7,Bias Mitigation & Population Equity,Define cultural sensitivity requirements for clinical communication patterns,Advanced,High
+C7.3.5,C7,Bias Mitigation & Population Equity,Establish disability accommodation standards for patient interaction interfaces,Advanced,High
+C7.3.6,C7,Bias Mitigation & Population Equity,Implement age-appropriate communication adaptation for diverse patient ages,Advanced,High
+C7.4.1,C7,Bias Mitigation & Population Equity,Define equity reporting requirements for regulatory submissions and public disclosure,Advanced,High
+C7.4.2,C7,Bias Mitigation & Population Equity,Establish community advisory boards for ongoing bias monitoring and feedback,Advanced,High
+C7.4.3,C7,Bias Mitigation & Population Equity,Implement longitudinal fairness tracking across model versions and updates,Advanced,Medium
+C7.4.4,C7,Bias Mitigation & Population Equity,Define minimum sample size requirements for subgroup performance validation,Advanced,Medium
+C7.4.5,C7,Bias Mitigation & Population Equity,Establish fairness impact assessment requirements for model changes and updates,Advanced,Medium
+C7.4.6,C7,Bias Mitigation & Population Equity,Implement bias mitigation technique documentation with effectiveness evidence,Advanced,Medium
+C7.5.1,C7,Bias Mitigation & Population Equity,Define cross-institutional fairness benchmarking standards for comparative assessment,Advanced,Medium
+C7.5.2,C7,Bias Mitigation & Population Equity,Establish patient population stratification requirements for clinical trial design,Advanced,Medium
+C7.5.3,C7,Bias Mitigation & Population Equity,Implement automated fairness testing in continuous integration and deployment pipelines,Advanced,Medium
+C7.5.4,C7,Bias Mitigation & Population Equity,Define health literacy accommodation requirements for patient-facing communications,Advanced,Medium
+C7.5.5,C7,Bias Mitigation & Population Equity,Establish intersectionality analysis requirements considering compounding disadvantage,Advanced,Medium
+C7.5.6,C7,Bias Mitigation & Population Equity,Implement equity-aware model selection criteria prioritizing fair performance,Expert,High
+C7.6.1,C7,Bias Mitigation & Population Equity,Define vulnerable population enhanced monitoring with heightened safety thresholds,Expert,High
+C7.6.2,C7,Bias Mitigation & Population Equity,Establish bias education requirements for AI development and clinical deployment teams,Expert,High
+C7.6.3,C7,Bias Mitigation & Population Equity,Implement fairness-aware data collection guidelines reducing representation gaps,Expert,High
+C7.6.4,C7,Bias Mitigation & Population Equity,Define equity audit scheduling with regular assessment cycles and public reporting,Expert,High
+C7.6.5,C7,Bias Mitigation & Population Equity,Establish remediation timelines for identified bias with enforcement mechanisms,Expert,High
+C8.1.1,C8,Tool Use & Integration Security,Implement role-based tool authorization with clinical appropriateness validation,Foundation,Critical
+C8.1.2,C8,Tool Use & Integration Security,Establish medical device integration controls maintaining FDA classification integrity,Foundation,Critical
+C8.1.3,C8,Tool Use & Integration Security,Deploy evidence-based tool selection with clinical contraindication checking,Foundation,Critical
+C8.1.4,C8,Tool Use & Integration Security,Conduct regulatory pathway analysis for tool combination impact on submissions,Foundation,Critical
+C8.1.5,C8,Tool Use & Integration Security,Implement tool access control lists with per-role permission enforcement,Foundation,Critical
+C8.1.6,C8,Tool Use & Integration Security,Define tool capability declarations specifying authorized operations per access level,Foundation,Critical
+C8.1.7,C8,Tool Use & Integration Security,Deploy tool input validation with schema enforcement and sanitization,Foundation,High
+C8.2.1,C8,Tool Use & Integration Security,Implement tool output verification against expected clinical result formats,Foundation,High
+C8.2.2,C8,Tool Use & Integration Security,Define tool escalation procedures for operations exceeding agent authorization,Foundation,High
+C8.2.3,C8,Tool Use & Integration Security,Establish tool audit logging capturing all invocation attempts with full context,Foundation,High
+C8.2.4,C8,Tool Use & Integration Security,Deploy tool rate limiting preventing excessive or anomalous usage patterns,Foundation,High
+C8.2.5,C8,Tool Use & Integration Security,Implement tool dependency management tracking inter-tool relationships,Foundation,High
+C8.2.6,C8,Tool Use & Integration Security,Define tool failure handling with graceful degradation and clinical safety preservation,Advanced,High
+C8.2.7,C8,Tool Use & Integration Security,Establish tool version compatibility verification for system integration points,Advanced,High
+C8.3.1,C8,Tool Use & Integration Security,Deploy tool access monitoring with real-time anomaly detection capabilities,Advanced,High
+C8.3.2,C8,Tool Use & Integration Security,Implement tool result integrity verification using checksums and validation rules,Advanced,High
+C8.3.3,C8,Tool Use & Integration Security,Define tool timeout policies preventing unbounded execution in clinical contexts,Advanced,High
+C8.3.4,C8,Tool Use & Integration Security,Establish tool rollback procedures for reverting unauthorized or erroneous actions,Advanced,High
+C8.3.5,C8,Tool Use & Integration Security,Deploy clinical circuit breaker mechanism for tool failure cascade prevention,Advanced,High
+C8.3.6,C8,Tool Use & Integration Security,Implement tool parameter boundary checking preventing clinically unsafe inputs,Advanced,High
+C8.3.7,C8,Tool Use & Integration Security,Define tool combination safety analysis for multi-tool operation sequences,Advanced,High
+C8.4.1,C8,Tool Use & Integration Security,Establish tool sandboxing for untested or experimental tool integrations,Advanced,High
+C8.4.2,C8,Tool Use & Integration Security,Deploy tool credential rotation and secure storage for authentication tokens,Advanced,Medium
+C8.4.3,C8,Tool Use & Integration Security,Implement tool execution tracing with complete call chain documentation,Advanced,Medium
+C8.4.4,C8,Tool Use & Integration Security,Define tool deauthorization procedures for compromised or deprecated integrations,Advanced,Medium
+C8.4.5,C8,Tool Use & Integration Security,Establish tool performance benchmarking for clinical latency requirements,Advanced,Medium
+C8.4.6,C8,Tool Use & Integration Security,Deploy tool error classification with severity-appropriate response protocols,Advanced,Medium
+C8.4.7,C8,Tool Use & Integration Security,Implement tool consent verification ensuring patient authorization for data access,Advanced,Medium
+C8.5.1,C8,Tool Use & Integration Security,Define tool interoperability standards for healthcare information exchange,Advanced,Medium
+C8.5.2,C8,Tool Use & Integration Security,Establish tool security assessment requirements for new integration approvals,Advanced,Medium
+C8.5.3,C8,Tool Use & Integration Security,Deploy tool usage analytics for capacity planning and optimization,Advanced,Medium
+C8.5.4,C8,Tool Use & Integration Security,Implement tool backup execution paths for critical clinical tool failures,Advanced,Medium
+C8.5.5,C8,Tool Use & Integration Security,Define tool data classification enforcing sensitivity-appropriate handling,Advanced,Medium
+C8.5.6,C8,Tool Use & Integration Security,Establish tool change management procedures with clinical impact assessment,Expert,High
+C8.5.7,C8,Tool Use & Integration Security,Deploy tool access revocation with immediate effect enforcement capability,Expert,High
+C8.6.1,C8,Tool Use & Integration Security,Implement tool multi-factor authorization for high-risk clinical operations,Expert,High
+C8.6.2,C8,Tool Use & Integration Security,Define tool audit trail retention policies meeting regulatory requirements,Expert,High
+C8.6.3,C8,Tool Use & Integration Security,Establish tool integration testing requirements for healthcare system connections,Expert,High
+C8.6.4,C8,Tool Use & Integration Security,Deploy tool anomaly response automation with clinical safety prioritization,Expert,High
+C8.6.5,C8,Tool Use & Integration Security,Implement patient identity verification before tool operations accessing records,Expert,High
+C8.6.6,C8,Tool Use & Integration Security,Define tool governance committee oversight for authorization policy management,Expert,High
+C8.6.7,C8,Tool Use & Integration Security,Establish tool compliance mapping to HAARF controls and regulatory requirements,Expert,High
