@@ -12,19 +12,28 @@ Imagine the doctor's office visit of the future. Prior to your visit, you check 
 
 ## What we're building
 
-**Wearable risk → voice check-in → FHIR chart → coverage → human handoff when needed.**
+**FlareCheck — between-visit flare check-in** (eczema/rash hero path): secure phone photo → Medplum FHIR chart → history-aware voice → Stedi coverage → human handoff. Wearable risk stays in the same loop.
 
-Free consumer wearable signals from the phone; when risk crosses a threshold, a history-aware agent calls, charts into Medplum, checks Stedi eligibility, and escalates to a person for co-regulation — so clinicians get a ready encounter, not another unread alert.
+→ **[docs/PRODUCT_BRIEF.md](docs/PRODUCT_BRIEF.md)** · **[agent/](agent/README.md)** · **[web/](web/README.md)**
 
 Full problem statement, science, market, Oura/Curry insights, psychology, and demo script:
 
 → **[docs/PRODUCT_BRIEF.md](docs/PRODUCT_BRIEF.md)**
 
-## Agent stack (building now)
+## Stack
 
-Python LangGraph agent with Medplum + Moss + Deepgram + Stedi + [Open Wearables](https://openwearables.io/docs) (Whoop/Oura/Fitbit/…) hooks — works in `AGENT_MODE=mock` offline:
+| Piece | Path |
+|-------|------|
+| Agent API (LangGraph, Medplum Binary capture, Moss, Stedi) | [agent/README.md](agent/README.md) |
+| Product UI (intake + `/capture` + clinician chart) | [web/README.md](web/README.md) |
+| Product brief | [docs/PRODUCT_BRIEF.md](docs/PRODUCT_BRIEF.md) |
 
-→ **[agent/README.md](agent/README.md)**
+```bash
+# Terminal 1
+cd agent && source .venv/bin/activate && uvicorn src.api:app --reload --port 8080
+# Terminal 2
+cd web && npm run dev
+```
 
 ## Schedule | Aug 1, 2026 (PT)
 

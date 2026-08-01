@@ -1,0 +1,91 @@
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+
+async function json<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API}${path}`, init);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || res.statusText);
+  }
+  return res.json() as Promise<T>;
+}
+
+export type StartSession = {
+  patient_id: string;
+  patient_display: string;
+  encounter_id: string;
+  mode: string;
+  turn?: { reply: string; handoff: boolean; session: Record<string, unknown> };
+};
+
+export type CaptureMeta = {
+  token: string;
+  patient_display: string;
+  encounter_id: string;
+  content_type: string;
+  expires_at: number;
+  proxy_upload_url: string;
+  instructions: string;
+};
+
+export type ChartPayload = {
+  mode: string;
+  encounter: Record<string, unknown>;
+  patient: Record<string, unknown>;
+  observations: Record<string, unknown>[];
+  compositions: Record<string, unknown>[];
+  photos: { document_reference_id?: string; title?: string; url?: string; content_type?: string }[];
+  eligibility?: string;
+  handoff_hint?: string;
+};
+
+export const api = {
+  health: () => json<Record<string, unknown>>('/health'),
+  startSession: (message?: string) =>
+    json<StartSession>('/session/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        reason: 'Flare check-in — eczema / rash',
+        message: message || undefined,
+      }),
+    }),
+  turn: (message: string, threadId?: string) =>
+    json<{ reply: string; handoff: boolean; session: Record<string, unknown> }>('/turn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, thread_id: threadId }),
+    }),
+  createCaptureLink: (patientId?: string, encounterId?: string) =>
+    json<{ url: string; token: string; encounter_id: string; expires_at: number }>('/capture-links', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        patient_id: patientId,
+        encounter_id: encounterId,
+        reason: 'Eczema / rash flare photo',
+      }),
+    }),
+  getCapture: (token: string, sig?: string | null) =>
+    json<CaptureMeta>(`/capture/${token}${sig ? `?s=${encodeURIComponent(sig)}` : ''}`),
+  uploadCapture: async (token: string, file: File, sig?: string | null) => {
+    const form = new FormData();
+    form.append('file', file);
+    const qs = sig ? `?s=${encodeURIComponent(sig)}` : '';
+    const res = await fetch(`${API}/capture/${token}/upload${qs}`, {
+      method: 'POST',
+      body: form,
+      headers: sig ? { 'X-Capture-Sig': sig } : undefined,
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json() as Promise<{
+      ok: boolean;
+      encounter_id: string;
+      document_reference_id?: string;
+      media_id?: string;
+      mode?: string;
+    }>;
+  },
+  chart: (encounterId: string) => json<ChartPayload>(`/chart/${encounterId}`),
+};
+
+export { API };

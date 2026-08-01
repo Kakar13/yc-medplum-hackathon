@@ -10,3 +10,8 @@ __pycache__/
 
 # Vendor clone — run locally via docker compose (see agent/README)
 infra/open-wearables/
+
+# Web
+web/node_modules/
+web/dist/
+web/.env

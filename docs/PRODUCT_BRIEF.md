@@ -1,13 +1,13 @@
-# Product brief — wearable risk → voice → FHIR chart → coverage
+# Product brief — FlareCheck
 
 YC x Medplum Agentic Healthcare Hackathon · Aug 1, 2026  
-Working names: *PreChart* / *PulseCheck* / *VitalsCall*
+**Working title: FlareCheck** (was PreChart / PulseCheck / VitalsCall)
 
 ---
 
 ## One-liner
 
-**Free wearable data from the phone** — when risk crosses a threshold, a history-aware voice agent checks in, charts into FHIR, checks coverage, and hands off to a human when the patient needs co-regulation.
+**Between-visit flare check-in** — for eczema/rash (and optional wearable risk): a history-aware agent talks to the patient, sends a **short-lived secure phone photo link** into Medplum (`Binary` + `DocumentReference`), charts the encounter, checks coverage, and hands off to a human when co-regulation is needed.
 
 ---
 
@@ -117,19 +117,21 @@ flowchart LR
 
 ## Demo script (90 seconds)
 
-1. Dashboard: Patient with known history (e.g. asthma) + wearable trend red-lining  
-2. System triggers Deepgram agent call  
-3. Patient confirms symptoms; Moss pulls prior flares into questions  
-4. Medplum Encounter + Observations + Composition update live  
-5. Stedi: “Urgent telehealth — active coverage, est. $X copay”  
-6. Optional: “Talk to a nurse/clinician” → handoff with chart already written  
-7. Clinician view: ready note, not a raw HRV alert  
+1. Ops UI (`web/`): start FlareCheck for Jordan Lee (eczema history)  
+2. Patient: “Elbows flaring, can’t sleep from itch” → Moss pulls prior tele-derm + triamcinolone  
+3. Agent issues **secure capture link** (15m, single-use) → phone photo → Medplum `Binary` + `DocumentReference`  
+4. Encounter + Observations + Composition update (no skin diagnosis claim)  
+5. Stedi: urgent tele-dermatology coverage / est. copay  
+6. Optional: “Talk to a person” → human handoff with chart + photo ready  
+7. Clinician `/chart/:encounterId`: ready note + photo, not a raw alert dump  
 
-**Hackathon scope:** mock wearable feed + rule-based risk; one persona; one vertical slice by 5:00pm PT.
+**Hackathon scope today:** eczema photo path is the hero; wearable risk remains in the same agent loop. One persona; ship by 5:00pm PT.
 
-**Sample patients:** use [Synthea](https://mitre.github.io/fhir-for-research/modules/synthea-overview) for synthetic FHIR (privacy-safe, not de-identified real data). Repo importer: `python -m src.synthea_import` in `agent/` — see `agent/data/synthea/` and [pre-generated downloads](https://synthea.mitre.org/downloads).
+**Sample patients:** [Synthea](https://mitre.github.io/fhir-for-research/modules/synthea-overview)-shaped bundles in `agent/data/synthea/` (`sample_eczema_bundle.json`). Importer: `python -m src.synthea_import`.
 
-**Wearable connect:** [Open Wearables](https://openwearables.io/docs) — one open-source API for Whoop, Oura, Fitbit, Garmin, Apple Health, etc. (OAuth + normalized recovery/sleep/HRV). Agent tool: `get_wearable_risk` → triage language only, not diagnosis. Skill: `.cursor/skills/open-wearables/`.
+**Wearable connect (secondary):** [Open Wearables](https://openwearables.io/docs) — Whoop/Oura/Fitbit/… via `get_wearable_risk`. Skill: `.cursor/skills/open-wearables/`.
+
+**Medplum core:** `Binary` + `securityContext` + upload path + `DocumentReference` / `Media` on `Encounter` — see [Binary data](https://www.medplum.com/docs/fhir-datastore/binary-data) and [Binary security context](https://www.medplum.com/docs/access/binary-security-context).
 
 ---
 
@@ -221,15 +223,17 @@ People often bypass agents to reach a real human for calm and trust. Named ideas
 
 ## Open decisions for build day
 
-- [ ] Beachhead condition (asthma / cardiometabolic / women’s health–cycle)  
-- [ ] Product name  
-- [ ] Mock wearable schema (JSON feed)  
-- [ ] Risk rules (specificity-first, Desai-style)  
+- [x] Beachhead for today: **eczema / rash flare** (+ optional wearable)  
+- [x] Product name working title: **FlareCheck**  
+- [x] Secure photo link (HMAC token → phone → Medplum Binary)  
 - [ ] Human handoff: simulated clinician queue vs real second user  
+- [ ] Live Medplum ClientApplication credentials in `agent/.env`  
+- [ ] Deepgram mic / Voice Agent in the web shell  
 
 ## Related project files
 
-- **Agent stack (LangGraph + Medplum + Moss + Deepgram):** [`../agent/README.md`](../agent/README.md)  
+- **Agent API:** [`../agent/README.md`](../agent/README.md)  
+- **Web UI:** [`../web/README.md`](../web/README.md)  
 - Hackathon + judging: [`.cursor/skills/yc-medplum-hackathon/SKILL.md`](../.cursor/skills/yc-medplum-hackathon/SKILL.md)  
-- Medplum / Deepgram / Stedi / Moss skills under [`.cursor/skills/`](../.cursor/skills/)  
+- Skills: Medplum / Deepgram / Stedi / Moss / Open Wearables under [`.cursor/skills/`](../.cursor/skills/)  
 - Event README: [`../README.md`](../README.md)
