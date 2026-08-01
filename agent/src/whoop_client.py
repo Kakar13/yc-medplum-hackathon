@@ -25,16 +25,60 @@ TOKEN_URL = "https://api.prod.whoop.com/oauth/oauth2/token"
 API_BASE = "https://api.prod.whoop.com/developer/v2"
 
 TOKEN_PATH = Path(__file__).resolve().parent.parent / ".whoop_tokens.json"
+# Pending OAuth states live on disk, not in the instance: a new WhoopClient is built per
+# request and uvicorn --reload replaces the process, so in-memory state would make CSRF
+# validation impossible to enforce rather than merely inconvenient.
+STATE_PATH = Path(__file__).resolve().parent.parent / ".whoop_states.json"
+STATE_TTL_SECONDS = 15 * 60
 
 
 class WhoopNotConnected(RuntimeError):
     pass
 
 
+class WhoopStateInvalid(RuntimeError):
+    pass
+
+
 class WhoopClient:
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
-        self._states: dict[str, str] = {}
+
+    # --- CSRF state, persisted across processes ---
+
+    def _read_states(self) -> dict[str, float]:
+        try:
+            data = json.loads(STATE_PATH.read_text())
+        except (FileNotFoundError, json.JSONDecodeError):
+            return {}
+        now = datetime.now(timezone.utc).timestamp()
+        return {
+            k: v
+            for k, v in data.items()
+            if isinstance(v, (int, float)) and now - v < STATE_TTL_SECONDS
+        }
+
+    def _write_states(self, states: dict[str, float]) -> None:
+        STATE_PATH.write_text(json.dumps(states))
+        try:
+            STATE_PATH.chmod(0o600)
+        except OSError:
+            pass
+
+    def _remember_state(self, state: str) -> None:
+        states = self._read_states()
+        states[state] = datetime.now(timezone.utc).timestamp()
+        self._write_states(states)
+
+    def consume_state(self, state: str | None) -> None:
+        """Single-use check. Raises WhoopStateInvalid on mismatch, replay, or expiry."""
+        if not state:
+            raise WhoopStateInvalid("Missing OAuth state parameter")
+        states = self._read_states()
+        if state not in states:
+            raise WhoopStateInvalid("Unknown or expired OAuth state")
+        states.pop(state, None)
+        self._write_states(states)
 
     @property
     def configured(self) -> bool:
@@ -82,7 +126,7 @@ class WhoopClient:
                 "https://developer-dashboard.whoop.com/"
             )
         state = secrets.token_urlsafe(16)
-        self._states[state] = datetime.now(timezone.utc).isoformat()
+        self._remember_state(state)
         params = {
             "client_id": self.settings.whoop_client_id,
             "redirect_uri": self.settings.whoop_redirect_uri,
