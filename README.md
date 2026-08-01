@@ -12,28 +12,74 @@ Imagine the doctor's office visit of the future. Prior to your visit, you check 
 
 ## What we're building
 
-**FlareCheck — between-visit flare check-in** (eczema/rash hero path): secure phone photo → Medplum FHIR chart → history-aware voice → Stedi coverage → human handoff. Wearable risk stays in the same loop.
+# Preflight — the pre-visit clinic
 
-→ **[docs/PRODUCT_BRIEF.md](docs/PRODUCT_BRIEF.md)** · **[agent/](agent/README.md)** · **[web/](web/README.md)**
+You check in by talking. The conversation charts itself into Medplum as it happens. Whatever
+you describe — a knee, a cough, a rash, a worry — gets researched against real literature,
+grounded in your own history, and turned into an n=1 plan that a clinician reviews before you
+walk in. With the cost and coverage answered up front.
 
-Full problem statement, science, market, Oura/Curry insights, psychology, and demo script:
+**And the part nobody has built:** every action that agent takes is bound to one patient by
+its authorization, attributed in the record, and committed by a human.
 
-→ **[docs/PRODUCT_BRIEF.md](docs/PRODUCT_BRIEF.md)**
+That last part is why only ~3% of health systems have agentic AI in live workflows while 43%
+are piloting it ([NEJM AI](https://ai.nejm.org/doi/full/10.1056/AI-S2501336), Jan 2026). It is
+also measurable: [HAARF](https://github.com/Task-force-for-AI-agents-in-Healthcare/haarf), the
+279-requirement regulatory framework from a 40+ expert task force, drives unauthorized tool
+execution to 0% — but its wrong-patient scenario still passes only **6%** of the time with all
+five of its middleware layers on, versus 16% with them off. None of those layers binds the
+subject of care, so an agent authenticates perfectly and then names its patient in a free-text
+tool argument.
+
+Preflight's thesis: **the subject of care is a property of the agent's authorization, never an
+argument the model chooses.** We replay HAARF's RT-1…RT-6 against our gateway and get 5/5
+correct with 0 false positives, including the wrong-patient case they measured as unsolved —
+plus 8/8 on Medplum-MCP-shaped `fhir-request` calls, where the patient hides inside a URL the
+model composes.
+
+This is the pattern [Medplum's own AI docs](https://www.medplum.com/docs/ai) describe — *"can
+suggest, but not act"*, agents under the same policy framework as humans, an `AuditEvent` for
+every AI action. Preflight implements that sentence and adds the missing piece: a way to
+**verify** it is holding.
+
+→ **[docs/AGENT_GOVERNANCE.md](docs/AGENT_GOVERNANCE.md)** — the thesis, the HAARF analysis, results, and honest limits
+
+## How it maps to the brief
+
+| The future described above | How Preflight does it |
+|---|---|
+| Check in by talking to a voice agent | Deepgram Nova-3 STT → LangGraph agent (`/voice/turn`) |
+| Conversation charted as it happens | `chart_to_medplum` → Encounter + Observation + Composition |
+| Any health issue deep researched | `deep_research` → Europe PMC, real citations only, never generated |
+| Tailored with full context of your history | Moss hybrid retrieval over the patient's own record |
+| n=1 treatment customized for you | `propose_care_plan` → CarePlan with per-patient reasoning + evidence |
+| Peer reviewed by experts | `status: draft` + Task + Provenance; a human commits it at `/review` |
+| Data visualized to enhance understanding | Clinician chart: note, photo, wearable Observations, citations |
+| How much will it cost, will insurance cover it | `check_eligibility` → live Stedi test mode: real 271 parsed to *"$15 copay for an office visit, $0 deductible remaining"* |
+| *(unstated but load-bearing)* | Patient-scoped capability gateway + AuditEvent on every decision |
 
 ## Stack
 
 | Piece | Path |
 |-------|------|
-| Agent API (LangGraph, Medplum Binary capture, Moss, Stedi) | [agent/README.md](agent/README.md) |
-| Product UI (intake + `/capture` + clinician chart) | [web/README.md](web/README.md) |
-| Product brief | [docs/PRODUCT_BRIEF.md](docs/PRODUCT_BRIEF.md) |
+| Agent API (LangGraph, capability gateway, Medplum, Moss, Stedi, research) | [agent/README.md](agent/README.md) |
+| Product UI (intake · `/capture` · chart · `/review` · `/trust`) | [web/README.md](web/README.md) |
+| Governance thesis + HAARF scorecard | [docs/AGENT_GOVERNANCE.md](docs/AGENT_GOVERNANCE.md) |
+| Product brief (science, market, psychology) | [docs/PRODUCT_BRIEF.md](docs/PRODUCT_BRIEF.md) |
+| Closed-loop wearable synthesis | [docs/CLOSED_LOOP_SYNTHESIS.md](docs/CLOSED_LOOP_SYNTHESIS.md) |
 
 ```bash
 # Terminal 1
 cd agent && source .venv/bin/activate && uvicorn src.api:app --reload --port 8080
 # Terminal 2
 cd web && npm run dev
+
+# The proof
+cd agent && python scripts/haarf_scorecard.py
 ```
+
+Then open http://localhost:5173 — intake at `/`, review queue at `/review`, governance at
+`/trust`.
 
 ## Schedule | Aug 1, 2026 (PT)
 
@@ -60,6 +106,15 @@ Every attendee walks out with swag.
 
 1. **Potential impact** — meaningfully improve patient care, clinician experience, or quality of care. Spirit of Agentic Healthcare: intelligent, standards-compliant, automated, voice-enabled; enhance clinicians rather than add workload.
 2. **Effective use of provided technologies** — Deepgram, Medplum, moss.dev, and/or Stedi.
+
+All four are live, not stubbed — `GET /health` reports each one:
+
+| Sponsor | How it's used | Live? |
+| --- | --- | --- |
+| Medplum | FHIR CDR: Patient, Encounter, Observation, Composition, Binary, DocumentReference, CarePlan, Provenance, Task, AuditEvent. SMART scope `patient=<id>` is what makes the gateway enforceable server-side | yes (mock fallback when unconfigured) |
+| Deepgram | Nova-3 STT for voice intake (`/voice/transcribe`, `/voice/turn`) | yes |
+| moss.dev | Hybrid retrieval over the patient's own record, so the agent has history mid-conversation | yes |
+| Stedi | Real-time eligibility (X12 270/271) in test mode; we parse the 271 into the numbers a patient asked for rather than echoing the payload | yes |
 
 ## Resources
 

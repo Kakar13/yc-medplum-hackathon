@@ -12,5 +12,5 @@ if ! curl -sf "$API/health" >/tmp/flarecheck_health.json; then
   echo "LOOP_TICK_FAIL api_down"
   exit 1
 fi
-python scripts/smoke_flarecheck.py "$API"
+python scripts/smoke_preflight.py "$API"
 echo "LOOP_TICK_OK $(date -u +%Y-%m-%dT%H:%M:%SZ)"
