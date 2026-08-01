@@ -17,6 +17,25 @@ from .config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
+
+def _entries(bundle: Any) -> list[dict[str, Any]]:
+    """Resources out of a FHIR search result.
+
+    pymedplum's `search_resources` returns the raw Bundle dict, not a list. Iterating it walks
+    the dict's *keys* — so every live-mode read silently yielded the strings "resourceType",
+    "type", "entry" instead of resources, and anything calling .get() on them raised.
+    """
+    if not bundle:
+        return []
+    if isinstance(bundle, dict):
+        return [
+            entry["resource"]
+            for entry in (bundle.get("entry") or [])
+            if isinstance(entry, dict) and isinstance(entry.get("resource"), dict)
+        ]
+    # A FHIRBundle wrapper or a plain list both iterate resources directly.
+    return [r for r in bundle if isinstance(r, dict)]
+
 # Process-wide mock CDR so API requests share Patient/Encounter/photo state
 _MOCK_STORE: dict[str, list[dict[str, Any]]] = {
     "Patient": [],
@@ -343,7 +362,7 @@ class MedplumService:
             encounter_id = enc["id"]
         self.add_observation(patient_id, encounter_id, f"Patient: {user_text}", "voice-utterance")
         note = f"Patient: {user_text}\nAgent: {agent_text}"
-        comp = self.write_composition(patient_id, encounter_id, "Live flare chart", note)
+        comp = self.write_composition(patient_id, encounter_id, "Live intake note", note)
         return {
             "encounter_id": encounter_id,
             "composition_id": comp.get("id"),
@@ -799,8 +818,8 @@ class MedplumService:
         tasks: list[dict[str, Any]] = []
         if self._client:
             try:
-                plans = list(self._client.search_resources("CarePlan", {"_count": "50"}))
-                tasks = list(self._client.search_resources("Task", {"_count": "50"}))
+                plans = _entries(self._client.search_resources("CarePlan", {"_count": "50"}))
+                tasks = _entries(self._client.search_resources("Task", {"_count": "50"}))
             except Exception:
                 plans, tasks = [], []
         else:
@@ -894,8 +913,10 @@ class MedplumService:
         if self._client:
             self._client.create_resource(provenance)
             try:
-                for t in self._client.search_resources(
-                    "Task", {"focus": f"CarePlan/{care_plan_id}"}
+                for t in _entries(
+                    self._client.search_resources(
+                        "Task", {"focus": f"CarePlan/{care_plan_id}"}
+                    )
                 ):
                     t["status"] = "completed" if approve else "rejected"
                     self._client.update_resource(t)
@@ -928,19 +949,27 @@ class MedplumService:
             patient = (
                 self._client.read_resource("Patient", patient_id) if patient_id else {}
             )
-            observations = self._client.search_resources(
-                "Observation", {"encounter": f"Encounter/{encounter_id}"}
+            observations = _entries(
+                self._client.search_resources(
+                    "Observation", {"encounter": f"Encounter/{encounter_id}"}
+                )
             )
-            compositions = self._client.search_resources(
-                "Composition", {"encounter": f"Encounter/{encounter_id}"}
+            compositions = _entries(
+                self._client.search_resources(
+                    "Composition", {"encounter": f"Encounter/{encounter_id}"}
+                )
             )
-            docrefs = self._client.search_resources(
-                "DocumentReference", {"encounter": f"Encounter/{encounter_id}"}
+            docrefs = _entries(
+                self._client.search_resources(
+                    "DocumentReference", {"encounter": f"Encounter/{encounter_id}"}
+                )
             )
             # Media search by encounter may vary
             try:
-                media = self._client.search_resources(
-                    "Media", {"encounter": f"Encounter/{encounter_id}"}
+                media = _entries(
+                    self._client.search_resources(
+                        "Media", {"encounter": f"Encounter/{encounter_id}"}
+                    )
                 )
             except Exception:
                 media = []

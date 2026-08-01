@@ -148,10 +148,27 @@ def function_definitions() -> list[dict[str, Any]]:
     return defs
 
 
-def build_settings(*, listen_model: str, greeting: str | None = GREETING) -> dict[str, Any]:
-    """Settings frame for the Voice Agent socket, tuned for turn latency."""
+def build_settings(
+    *, listen_model: str, greeting: str | None = GREETING, history: str = ""
+) -> dict[str, Any]:
+    """Settings frame for the Voice Agent socket, tuned for turn latency.
+
+    `history` is the patient's own record, injected into the system prompt rather than left for
+    the model to go and fetch. Retrieval the model has to elect to do is retrieval that sometimes
+    does not happen, and "tailored with full context of your history" is not a claim that should
+    hold only on the runs where it remembered.
+    """
     s = get_settings()
     is_flux = listen_model.startswith("flux")
+    prompt = VOICE_SYSTEM_PROMPT
+    if history:
+        prompt = (
+            f"{VOICE_SYSTEM_PROMPT}\n\n"
+            "PATIENT RECORD — retrieved before this call. Treat it as known context: refer to it "
+            "naturally, and do not ask about things it already answers. Do not read it aloud as a "
+            "list, and do not infer anything it does not say.\n"
+            f"{history}\n"
+        )
 
     listen_provider: dict[str, Any] = {"type": "deepgram", "model": listen_model}
     if is_flux:
@@ -189,7 +206,7 @@ def build_settings(*, listen_model: str, greeting: str | None = GREETING) -> dic
                     "model": s.openai_model or "gpt-4o-mini",
                     "temperature": 0.3,
                 },
-                "prompt": VOICE_SYSTEM_PROMPT,
+                "prompt": prompt,
                 "functions": function_definitions(),
             },
             "speak": {"provider": {"type": "deepgram", "model": "aura-2-thalia-en"}},
@@ -242,6 +259,99 @@ class VoiceBridge:
         self._tools = {t.name: t for t in TOOLS}
         self._dg: Any = None
         self._failures: dict[str, int] = {}
+        self._research_task: asyncio.Task | None = None
+        self._chart_tasks: set[asyncio.Task] = set()
+        self._pending_user = ""
+
+    async def _patient_history(self) -> str:
+        """Pull the bound patient's record once, to seed the prompt before the call starts."""
+        started = time.perf_counter()
+        try:
+            text = await self._tools["moss_search"].ainvoke(
+                {"query": "active conditions, medications, allergies, recent problems"}
+            )
+        except Exception as exc:  # noqa: BLE001 - a cold index must not block the call
+            logger.warning("history preload failed: %s", exc)
+            return ""
+        if not isinstance(text, str) or text.startswith("DENIED") or "No relevant history" in text:
+            return ""
+        await self._emit(
+            {
+                "type": "ToolCall",
+                "name": "moss_search",
+                "arguments": {"query": "patient record", "trigger": "preload"},
+                "denied": False,
+                "ms": round((time.perf_counter() - started) * 1000),
+                "preview": text[:400],
+            }
+        )
+        return text[:4000]
+
+    def _maybe_chart(self, agent_text: str) -> None:
+        """Write the exchange that just happened into the chart, without being asked.
+
+        The brief's claim is that the conversation is charted *as it happens*. Across rehearsals
+        the model charted on some runs and not others, which makes the note a lottery. Pairing
+        each patient utterance with the reply it produced and writing it here means the record
+        exists whatever the model decides to do.
+        """
+        user_text, self._pending_user = self._pending_user, ""
+        if not user_text or not agent_text:
+            return
+
+        async def run() -> None:
+            started = time.perf_counter()
+            try:
+                result = await self._tools["chart_to_medplum"].ainvoke(
+                    {"user_text": user_text, "agent_summary": agent_text}
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("background charting failed: %s", exc)
+                return
+            await self._emit(
+                {
+                    "type": "ToolCall",
+                    "name": "chart_to_medplum",
+                    "arguments": {"user_text": user_text[:80], "trigger": "automatic"},
+                    "denied": isinstance(result, str) and result.startswith("DENIED"),
+                    "ms": round((time.perf_counter() - started) * 1000),
+                    "preview": (result or "")[:400],
+                }
+            )
+
+        self._chart_tasks.add(asyncio.create_task(run()))
+
+    def _maybe_research(self, complaint: str) -> None:
+        """Kick off literature retrieval on the first real thing the patient says.
+
+        Left to the model this is unreliable — across rehearsals it charted and priced the visit
+        but skipped research entirely, so the evidence pane stayed empty and the proposed plan
+        had nothing behind it. Running it here makes it a property of the conversation rather
+        than of the model's mood. It is deliberately fire-and-forget: results land in the chart,
+        so a two-second literature search never delays a spoken reply.
+        """
+        if self._research_task is not None or len(complaint.strip()) < 20:
+            return
+
+        async def run() -> None:
+            started = time.perf_counter()
+            try:
+                result = await self._tools["deep_research"].ainvoke({"complaint": complaint})
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("background research failed: %s", exc)
+                return
+            await self._emit(
+                {
+                    "type": "ToolCall",
+                    "name": "deep_research",
+                    "arguments": {"complaint": complaint[:80], "trigger": "automatic"},
+                    "denied": False,
+                    "ms": round((time.perf_counter() - started) * 1000),
+                    "preview": (result or "")[:400],
+                }
+            )
+
+        self._research_task = asyncio.create_task(run())
 
     def _note_failure(self, name: str, content: str) -> str:
         """Break retry loops.
@@ -299,18 +409,26 @@ class VoiceBridge:
             ping_timeout=20,
         ) as dg:
             self._dg = dg
-            await dg.send(json.dumps(build_settings(listen_model=model)))
+            history = await self._patient_history()
+            await dg.send(json.dumps(build_settings(listen_model=model, history=history)))
 
             pump = asyncio.create_task(self._pump_client_audio(client_recv))
             try:
                 await self._read_deepgram(dg)
             finally:
+                # Give writes already in flight a moment to land. Cancelling here would drop the
+                # final exchange of the visit — the one the clinician is most likely to read.
+                if self._chart_tasks:
+                    await asyncio.wait(self._chart_tasks, timeout=3)
                 pump.cancel()
-                with_suppress = (asyncio.CancelledError, Exception)
-                try:
-                    await pump
-                except with_suppress:
-                    pass
+                for task in (pump, self._research_task, *self._chart_tasks):
+                    if task is None:
+                        continue
+                    task.cancel()
+                    try:
+                        await task
+                    except (asyncio.CancelledError, Exception):
+                        pass
 
     async def _pump_client_audio(self, client_recv: Callable) -> None:
         """Browser → Deepgram. Straight relay: any work here shows up as latency."""
@@ -392,11 +510,15 @@ class VoiceBridge:
 
         if kind == "ConversationText":
             role = event.get("role")
+            text = event.get("content") or ""
             if role == "user":
                 self.metrics.mark_user_done()
-            await self._emit(
-                {"type": "Transcript", "role": role, "text": event.get("content") or ""}
-            )
+                self._maybe_research(text)
+                if len(text.strip()) >= 12:
+                    self._pending_user = text
+            elif role == "assistant":
+                self._maybe_chart(text)
+            await self._emit({"type": "Transcript", "role": role, "text": text})
             return
 
         if kind == "AgentThinking":

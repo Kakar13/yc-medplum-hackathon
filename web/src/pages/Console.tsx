@@ -229,7 +229,9 @@ export function Console() {
             </button>
           </form>
 
-          {chart?.observations?.length ? (
+          {/* Only quantitative observations become gauges, so gate on those rather than on
+              observations existing — otherwise the heading renders over empty space. */}
+          {chart?.observations?.some((o) => typeof (o.valueQuantity as { value?: number })?.value === 'number') ? (
             <div className="patient-block">
               <h3>Your numbers</h3>
               <VitalsViz observations={chart.observations} friendly={FRIENDLY} />
