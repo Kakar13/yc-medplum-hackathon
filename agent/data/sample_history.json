@@ -1,6 +1,6 @@
 [
   {
-    "id": "synthea-patient-synthea-patient-jordan",
+    "id": "synthea-patient-synthea-patient-jordan-eczema",
     "text": "Patient Jordan Lee, gender=unknown, DOB=1992-04-12. Synthetic FHIR patient (Synthea / Synthea-shaped).",
     "metadata": {
       "type": "Patient",
@@ -8,59 +8,59 @@
     }
   },
   {
-    "id": "synthea-condition-synthea-cond-asthma",
-    "text": "Condition: Moderate persistent asthma. Onset=2019-06-01. Status=active.",
+    "id": "synthea-condition-synthea-cond-eczema",
+    "text": "Condition: Atopic dermatitis (eczema). Onset=2015-09-01. Status=active.",
     "metadata": {
       "type": "Condition",
       "source": "synthea"
     }
   },
   {
-    "id": "synthea-allergyintolerance-synthea-allergy-pcn",
-    "text": "Allergy: Penicillin \u2014 Rash.",
+    "id": "synthea-allergyintolerance-synthea-allergy-fragrance",
+    "text": "Allergy: Fragrance / scented lotions \u2014 contact flare \u2014 Worsening eczema / pruritus.",
     "metadata": {
       "type": "AllergyIntolerance",
       "source": "synthea"
     }
   },
   {
-    "id": "synthea-medicationrequest-synthea-med-albuterol",
-    "text": "Active medication: Albuterol sulfate HFA 90 mcg. 2 puffs every 4-6 hours as needed for wheeze or shortness of breath Status=active.",
+    "id": "synthea-medicationrequest-synthea-med-triamcinolone",
+    "text": "Active medication: Triamcinolone acetonide 0.1% cream. Apply thin layer to affected areas twice daily during flares; pause when clear Status=active.",
     "metadata": {
       "type": "MedicationRequest",
       "source": "synthea"
     }
   },
   {
-    "id": "synthea-medicationrequest-synthea-med-fluticasone",
-    "text": "Active medication: Fluticasone propionate HFA. 2 puffs twice daily Status=active.",
+    "id": "synthea-medicationrequest-synthea-med-moisturizer",
+    "text": "Active medication: Fragrance-free emollient (ceramide moisturizer) \u2014 liberally twice daily. Apply liberally after bathing and at bedtime Status=active.",
     "metadata": {
       "type": "MedicationRequest",
       "source": "synthea"
     }
   },
   {
-    "id": "synthea-encounter-synthea-enc-ed-flare",
-    "text": "Encounter (finished): Emergency room admission. Reason: Asthma exacerbation after viral URI. Period: 2025-03-12T02:15:00-04:00 \u2192 2025-03-12T06:40:00-04:00.",
+    "id": "synthea-encounter-synthea-enc-telederm",
+    "text": "Encounter (finished): Tele-dermatology follow-up. Reason: Bilateral antecubital eczema flare after new laundry detergent. Period: 2025-12-03T14:00:00-05:00 \u2192 2025-12-03T14:20:00-05:00.",
     "metadata": {
       "type": "Encounter",
       "source": "synthea"
     }
   },
   {
-    "id": "synthea-observation-synthea-obs-spo2",
-    "text": "Observation: Oxygen saturation = 93 % at 2025-03-12T02:30:00-04:00.",
-    "metadata": {
-      "type": "Observation",
-      "source": "synthea"
-    }
-  },
-  {
-    "id": "synthea-coverage-synthea-coverage",
+    "id": "synthea-coverage-synthea-coverage-eczema",
     "text": "Insurance on file: UnitedHealthcare (synthetic). Status=active. Prefer Stedi eligibility before paid telehealth.",
     "metadata": {
       "type": "Coverage",
       "source": "synthea"
+    }
+  },
+  {
+    "id": "protocol-eczema-flare",
+    "text": "Eczema / rash flare triage protocol (not a diagnosis): ask location, itch severity (0-10), sleep disruption, new products/detergents, infection exposures, adherence to topical steroid and moisturizer. Send secure photo capture link for clinician review. Escalate / human handoff if fever, rapidly spreading rash, pus with systemic symptoms, eye involvement, or infant with facial involvement. Otherwise consider same-day tele-dermatology or clinic follow-up.",
+    "metadata": {
+      "type": "Protocol",
+      "source": "local"
     }
   },
   {
@@ -73,7 +73,7 @@
   },
   {
     "id": "obs-baseline-wearable",
-    "text": "Baseline wearable pattern: resting heart rate typically 62-68 bpm overnight, HRV recovery score usually 55-70, sleep 6.5-7.5 hours. Significant deviation: resting HR >85 or recovery score <35 for 2+ nights.",
+    "text": "Baseline wearable pattern: resting heart rate typically 62-68 bpm overnight, HRV recovery score usually 55-70, sleep 6.5-7.5 hours. Significant deviation: resting HR >85 or recovery score <35 for 2+ nights. Poor sleep may accompany eczema itch flares \u2014 use as context only, not diagnosis.",
     "metadata": {
       "type": "Observation",
       "category": "wearable-baseline",

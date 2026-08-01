@@ -144,7 +144,21 @@ def bundle_to_docs(bundle: dict[str, Any]) -> list[dict[str, Any]]:
         doc = resource_to_doc(resource)
         if doc:
             docs.append(doc)
-    # Keep wearable/protocol fixtures that Synthea won't generate
+    # Keep protocol / wearable fixtures Synthea won't generate
+    docs.append(
+        {
+            "id": "protocol-eczema-flare",
+            "text": (
+                "Eczema / rash flare triage protocol (not a diagnosis): ask location, itch "
+                "severity (0-10), sleep disruption, new products/detergents, infection exposures, "
+                "adherence to topical steroid and moisturizer. Send secure photo capture link for "
+                "clinician review. Escalate / human handoff if fever, rapidly spreading rash, "
+                "pus with systemic symptoms, eye involvement, or infant with facial involvement. "
+                "Otherwise consider same-day tele-dermatology or clinic follow-up."
+            ),
+            "metadata": {"type": "Protocol", "source": "local"},
+        }
+    )
     docs.append(
         {
             "id": "protocol-asthma-flare",
@@ -163,7 +177,8 @@ def bundle_to_docs(bundle: dict[str, Any]) -> list[dict[str, Any]]:
             "text": (
                 "Baseline wearable pattern: resting heart rate typically 62-68 bpm overnight, "
                 "HRV recovery score usually 55-70, sleep 6.5-7.5 hours. Significant deviation: "
-                "resting HR >85 or recovery score <35 for 2+ nights."
+                "resting HR >85 or recovery score <35 for 2+ nights. Poor sleep may accompany "
+                "eczema itch flares — use as context only, not diagnosis."
             ),
             "metadata": {"type": "Observation", "category": "wearable-baseline", "source": "local"},
         }
