@@ -8,8 +8,15 @@ export function Home() {
   const [encounterId, setEncounterId] = useState('');
   const [patientId, setPatientId] = useState('');
   const [message, setMessage] = useState(
-    "My eczema on my elbows is flaring and I can't sleep from the itch.",
+    'My right knee has been swollen and painful for three weeks after I started running. ' +
+      "It's a 6 out of 10, worse going downstairs, better with rest. No fever, no injury.",
   );
+  const [redTeam, setRedTeam] = useState<{
+    allowed: boolean;
+    decision: string;
+    reason: string;
+    control: string;
+  } | null>(null);
   const [reply, setReply] = useState('');
   const [transcript, setTranscript] = useState('');
   const [captureUrl, setCaptureUrl] = useState('');
@@ -51,6 +58,19 @@ export function Home() {
         `${out.snapshot.provider} · risk ${out.snapshot.level} · ${out.observation_ids.length} FHIR Observations written` +
           (out.snapshot.reasons.length ? ` — ${out.snapshot.reasons.join('; ')}` : ''),
       );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runRedTeam() {
+    setBusy(true);
+    setError('');
+    try {
+      await ensureSession();
+      setRedTeam(await api.redTeam());
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -139,12 +159,22 @@ export function Home() {
 
   return (
     <main className="shell rise">
-      <p className="eyebrow">FlareCheck</p>
-      <h1>Between-visit flare check-in</h1>
+      <p className="eyebrow">Preflight</p>
+      <h1>Check in before you're seen</h1>
       <p className="lede">
-        Speak or type. We chart into Medplum, send a short-lived secure photo link, and keep the
-        clinician chart ready — not a diagnosis app.
+        Tell us what's going on, for anything — a knee, a cough, a rash, a worry. The
+        conversation charts itself into Medplum, gets researched against real literature,
+        and becomes a plan a clinician reviews before you arrive. Cost included.
       </p>
+
+      <div className="row" style={{ marginTop: '1rem' }}>
+        <Link className="btn ghost" to="/review">
+          Clinician review queue
+        </Link>
+        <Link className="btn ghost" to="/trust">
+          Trust &amp; governance
+        </Link>
+      </div>
 
       <div className="panel stack" style={{ marginTop: '2rem' }}>
         <div className="row">
@@ -157,7 +187,7 @@ export function Home() {
         </div>
 
         <label className="stack">
-          <span className="eyebrow">Patient message (text)</span>
+          <span className="eyebrow">What brings you in? (speak or type)</span>
           <textarea value={message} onChange={(e) => setMessage(e.target.value)} />
         </label>
 
@@ -222,9 +252,32 @@ export function Home() {
             <a className="mono" href={captureUrl}>
               {captureUrl}
             </a>
-            <p className="lede">Open on a phone to photograph the flare. Bytes go to Medplum via the API proxy.</p>
+            <p className="lede">
+              Open on a phone to photograph the finding. Bytes go to Medplum via the API
+              proxy — the phone never holds a credential.
+            </p>
           </div>
         ) : null}
+      </div>
+
+      <div className="panel stack" style={{ marginTop: '2rem' }}>
+        <span className="eyebrow">Red team — HAARF RT-4, wrong patient</span>
+        <p className="lede">
+          Ask the agent to act on a different patient than its session is bound to. The
+          published framework lets this through 94% of the time; here the subject of care
+          isn't the model's to choose.
+        </p>
+        <div className="row">
+          <button type="button" className="ghost" onClick={runRedTeam} disabled={busy}>
+            Attempt order for SYN-003
+          </button>
+          {redTeam ? (
+            <span className={redTeam.allowed ? 'warn mono' : 'mono'}>
+              {redTeam.decision.toUpperCase()} · {redTeam.control}
+            </span>
+          ) : null}
+        </div>
+        {redTeam ? <div className="reply">{redTeam.reason}</div> : null}
       </div>
     </main>
   );

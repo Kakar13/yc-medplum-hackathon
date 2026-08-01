@@ -43,6 +43,88 @@ export type ChartPayload = {
   }[];
   eligibility?: string;
   handoff_hint?: string;
+  proposals?: Proposal[];
+  research?: Citation[];
+  capability?: Capability | null;
+};
+
+export type Citation = {
+  title: string;
+  authors?: string;
+  journal?: string;
+  year?: string;
+  doi?: string;
+  pmid?: string;
+  cited_by?: number;
+  open_access?: boolean;
+  url?: string | null;
+};
+
+export type Proposal = {
+  care_plan_id: string;
+  title?: string;
+  summary?: string;
+  status?: string;
+  intent?: string;
+  author?: string;
+  created?: string;
+  encounter_id?: string;
+  activities: (string | undefined)[];
+  evidence: (string | undefined)[];
+  task_id?: string;
+  task_status?: string;
+  reviewer?: string;
+  awaiting_review?: boolean;
+};
+
+export type Capability = {
+  token: string;
+  patient_id: string;
+  encounter_id?: string | null;
+  purpose_of_use: string;
+  tools: string[];
+  actor: string;
+  on_behalf_of?: string | null;
+  expires_at: number;
+  expires_in_seconds: number;
+  smart_scope: string;
+};
+
+export type AuditEntry = {
+  at: number;
+  bound_patient?: string | null;
+  encounter_id?: string | null;
+  purpose_of_use?: string | null;
+  actor?: string;
+  allowed: boolean;
+  decision: string;
+  reason: string;
+  control: string;
+  tool: string;
+  requested_patient?: string | null;
+  enforcing?: boolean;
+  would_deny?: boolean;
+};
+
+export type Scorecard = {
+  scenarios: {
+    id: string;
+    name: string;
+    expected: string;
+    rationale: string;
+    verdict: string;
+    haarf_published?: { metric: string; baseline: string; haarf: string };
+    enforcing: { attempted: number; blocked: number; patient_boundary_blocked: number };
+    observe_only: { blocked: number };
+  }[];
+  totals: {
+    graded: number;
+    correct: number;
+    crossings_in_suite: number;
+    crossings_blocked: number;
+    false_positives: number;
+    audited: number;
+  };
 };
 
 export const api = {
@@ -52,7 +134,7 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        reason: 'Flare check-in — eczema / rash',
+        reason: 'Pre-visit check-in',
         message: message || undefined,
       }),
     }),
@@ -69,7 +151,7 @@ export const api = {
       body: JSON.stringify({
         patient_id: patientId,
         encounter_id: encounterId,
-        reason: 'Eczema / rash flare photo',
+        reason: 'Clinical photo for the visit',
       }),
     }),
   getCapture: (token: string, sig?: string | null) =>
@@ -125,6 +207,48 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ patient_id: patientId, encounter_id: encounterId }),
+    }),
+  capability: () =>
+    json<{
+      active: Capability | null;
+      enforcing: boolean;
+      stats: Record<string, number | boolean>;
+      principle: string;
+    }>('/capability'),
+  audit: (limit = 100) =>
+    json<{ entries: AuditEntry[]; stats: Record<string, number | boolean> }>(
+      `/audit?limit=${limit}`,
+    ),
+  reviewQueue: () => json<{ proposals: Proposal[] }>('/review-queue'),
+  review: (carePlanId: string, approve: boolean, reviewer = 'Dr. Reviewer', note = '') =>
+    json<{ care_plan_id: string; status: string; reviewer: string; tasks_closed: string[] }>(
+      `/review/${carePlanId}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approve, reviewer, note }),
+      },
+    ),
+  scorecard: () => json<Scorecard>('/haarf/scorecard'),
+  redTeam: (
+    tool = 'propose_care_plan',
+    args: Record<string, unknown> = {
+      mrn: 'SYN-003',
+      medication: 'metoprolol',
+      dose: '25mg PO BID',
+    },
+  ) =>
+    json<{
+      bound_patient: string | null;
+      allowed: boolean;
+      decision: string;
+      reason: string;
+      control: string;
+      referenced_patients: string[];
+    }>('/red-team/attempt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tool, args }),
     }),
   voiceTurn: async (blob: Blob, threadId?: string) => {
     const form = new FormData();

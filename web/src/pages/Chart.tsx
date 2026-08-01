@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { API, api, type ChartPayload } from '../api';
+import { VitalsViz } from '../components/VitalsViz';
 
 function patientName(patient: Record<string, unknown>): string {
   const names = (patient.name as { given?: string[]; family?: string }[]) || [];
@@ -25,21 +26,32 @@ export function Chart() {
   const latest = compositions[compositions.length - 1] as
     | { title?: string; section?: { title?: string; text?: { div?: string } }[] }
     | undefined;
+  // Narrative observations render as text; numeric ones go to the gauges.
+  const narrative = (data?.observations || []).filter(
+    (o) => (o as { valueString?: string }).valueString,
+  );
 
   return (
     <main className="shell rise">
       <p className="eyebrow">Clinician chart · Medplum FHIR</p>
       <h1>Ready encounter</h1>
       <p className="lede">
-        Live Composition, observations, and secure clinical photo — not a raw wearable dump.
+        Everything the pre-visit conversation produced: note, observations, photo,
+        retrieved evidence, cost, and the draft plan awaiting your signature.
       </p>
 
       <div className="row panel">
         <Link className="btn ghost" to="/">
           Back to intake
         </Link>
+        <Link className="btn ghost" to="/review">
+          Review queue
+        </Link>
         <span className="mono">Encounter/{encounterId}</span>
         {data ? <span className="mono">mode={data.mode}</span> : null}
+        {data?.capability ? (
+          <span className="mono">scope={data.capability.smart_scope}</span>
+        ) : null}
       </div>
 
       {error ? <p className="warn">{error}</p> : null}
@@ -70,22 +82,25 @@ export function Chart() {
           )}
 
           <div className="stack">
-            <span className="eyebrow">Observations</span>
+            <span className="eyebrow">Your measurements</span>
             {(data.observations || []).length === 0 ? (
               <p className="lede">None yet.</p>
             ) : (
-              <ul>
-                {(data.observations || []).map((o, i) => (
-                  <li key={i}>
-                    {String((o as { valueString?: string }).valueString || o.id || 'observation')}
-                  </li>
-                ))}
-              </ul>
+              <>
+                <VitalsViz observations={data.observations || []} />
+                {narrative.length > 0 ? (
+                  <ul>
+                    {narrative.map((o, i) => (
+                      <li key={i}>{String((o as { valueString?: string }).valueString)}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </>
             )}
           </div>
 
           <div className="stack">
-            <span className="eyebrow">Skin photo</span>
+            <span className="eyebrow">Clinical photo</span>
             {(data.photos || []).length === 0 ? (
               <p className="lede">No photo attached yet — open the secure capture link on a phone.</p>
             ) : (
@@ -108,9 +123,65 @@ export function Chart() {
             )}
           </div>
 
+          {(data.proposals || []).length > 0 ? (
+            <div className="stack">
+              <span className="eyebrow">AI-proposed plan</span>
+              {(data.proposals || []).map((p) => (
+                <div key={p.care_plan_id} className="proposal">
+                  <div className="proposal-head">
+                    <h3>{p.title}</h3>
+                    <span className={`badge ${p.status}`}>
+                      {p.status} · {p.intent}
+                    </span>
+                  </div>
+                  <p className="summary">{p.summary}</p>
+                  <ol className="steps">
+                    {p.activities.filter(Boolean).map((a, i) => (
+                      <li key={i}>{a}</li>
+                    ))}
+                  </ol>
+                  <p className="muted" style={{ fontSize: '0.85rem' }}>
+                    Authored by {p.author}. {p.awaiting_review
+                      ? 'Awaiting human review — not active care.'
+                      : `Committed by ${p.reviewer || 'a clinician'}.`}{' '}
+                    {p.awaiting_review ? (
+                      <Link to="/review">Review now →</Link>
+                    ) : null}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {(data.research || []).length > 0 ? (
+            <div className="stack">
+              <span className="eyebrow">Retrieved evidence (Europe PMC)</span>
+              {(data.research || []).map((c, i) => (
+                <div key={i} className="citation">
+                  <div>
+                    [{i + 1}]{' '}
+                    {c.url ? (
+                      <a href={c.url} target="_blank" rel="noreferrer">
+                        {c.title}
+                      </a>
+                    ) : (
+                      c.title
+                    )}
+                  </div>
+                  <div className="meta">
+                    {[c.journal, c.year, c.cited_by ? `cited ${c.cited_by}×` : null]
+                      .filter(Boolean)
+                      .join(' · ')}
+                    {c.open_access ? ' · open access' : ''}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
           {data.eligibility ? (
             <div className="stack">
-              <span className="eyebrow">Coverage (Stedi)</span>
+              <span className="eyebrow">Coverage &amp; cost (Stedi)</span>
               <div className="reply">{data.eligibility}</div>
             </div>
           ) : null}

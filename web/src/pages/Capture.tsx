@@ -53,7 +53,7 @@ export function Capture() {
   if (done) {
     return (
       <main className="shell rise">
-        <p className="eyebrow">FlareCheck</p>
+        <p className="eyebrow">Preflight</p>
         <h1>Photo attached</h1>
         <p className="lede">
           Your image is on the clinical chart for review. This is not a diagnosis — a clinician will

@@ -177,9 +177,409 @@ textarea {
   animation: rise 420ms ease both;
 }
 
+/* ---- Review queue + Trust pages ---- */
+
+.page {
+  width: min(1080px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 2rem 0 4rem;
+}
+
+.page-head {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 1.25rem;
+  margin-bottom: 1.75rem;
+}
+
+.page-head h1 {
+  margin: 0 0 0.35rem;
+  font-size: 1.9rem;
+}
+
+.sub {
+  color: var(--muted);
+  max-width: 46rem;
+  margin: 0;
+  font-size: 0.94rem;
+}
+
+.links {
+  display: flex;
+  gap: 1rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.page h2 {
+  font-size: 1.15rem;
+  margin: 2rem 0 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.count {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: var(--accent);
+  color: #f7fffb;
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+  letter-spacing: 0;
+}
+
+.empty,
+.muted {
+  color: var(--muted);
+}
+
+.error {
+  color: #8a1c1c;
+  background: rgba(138, 28, 28, 0.07);
+  padding: 0.7rem 0.9rem;
+  border-left: 3px solid #8a1c1c;
+}
+
+.reviewer {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.reviewer input {
+  font: inherit;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.proposal {
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1.25rem 1.4rem;
+  margin-bottom: 1.25rem;
+}
+
+.proposal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.proposal h3 {
+  margin: 0;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.1rem;
+}
+
+.proposal h4 {
+  margin: 1.1rem 0 0.4rem;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.proposal .summary {
+  margin: 0.6rem 0 0;
+}
+
+.steps {
+  margin: 0;
+  padding-left: 1.3rem;
+}
+
+.steps li {
+  margin-bottom: 0.3rem;
+}
+
+.evidence {
+  font-size: 0.86rem;
+  color: var(--muted);
+  margin: 0.2rem 0;
+}
+
+.attribution {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin: 1.25rem 0;
+  padding: 0.9rem 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.attribution dt,
+.kv dt {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin-bottom: 0.15rem;
+}
+
+.attribution dd,
+.kv dd {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 3px;
+  background: var(--wash);
+  color: var(--accent-deep);
+  white-space: nowrap;
+}
+
+.badge.draft {
+  background: rgba(138, 75, 18, 0.14);
+  color: var(--warn);
+}
+
+.badge.active,
+.badge.allow,
+.badge.pass {
+  background: rgba(15, 107, 86, 0.16);
+  color: var(--accent-deep);
+}
+
+.badge.revoked,
+.badge.deny,
+.badge.fail {
+  background: rgba(138, 28, 28, 0.12);
+  color: #8a1c1c;
+}
+
+.decided {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.decided li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.92rem;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.25rem;
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1.25rem 1.4rem;
+}
+
+.card h2 {
+  margin: 0 0 0.9rem;
+  font-size: 1rem;
+}
+
+.kv {
+  display: grid;
+  gap: 0.8rem;
+  margin: 0;
+}
+
+.tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.chip {
+  font-size: 0.74rem;
+  font-family: ui-monospace, Menlo, monospace;
+  background: var(--wash);
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+.metrics div {
+  display: flex;
+  flex-direction: column;
+}
+
+.metrics strong {
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.metrics span {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-top: 0.25rem;
+}
+
+table.scorecard,
+table.ledger {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+table.scorecard th,
+table.ledger th {
+  text-align: left;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  padding: 0.55rem 0.7rem;
+  border-bottom: 1px solid var(--line);
+}
+
+table.scorecard td,
+table.ledger td {
+  padding: 0.6rem 0.7rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+table.ledger tr.deny td,
+table.scorecard tr.fail td {
+  background: rgba(138, 28, 28, 0.05);
+}
+
+.totals {
+  font-size: 0.88rem;
+  color: var(--muted);
+  margin-top: 0.75rem;
+}
+
+.viz {
+  display: grid;
+  gap: 1rem;
+}
+
+.viz-row {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.viz-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.viz-name {
+  font-size: 0.9rem;
+}
+
+.viz-value {
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.viz-value.notable {
+  color: var(--warn);
+}
+
+.viz-value em {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-style: normal;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--muted);
+  margin-left: 0.2rem;
+}
+
+.viz-bar {
+  width: 100%;
+  height: 12px;
+  display: block;
+}
+
+.viz-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: var(--muted);
+  gap: 0.75rem;
+}
+
+.viz-note {
+  text-align: center;
+  flex: 1;
+}
+
+.viz-caption {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 0.25rem 0 0;
+  border-top: 1px solid var(--line);
+  padding-top: 0.7rem;
+}
+
+.citation {
+  font-size: 0.86rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.citation .meta {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
 @media (max-width: 640px) {
   .shell {
     width: min(100% - 1.25rem, 960px);
     padding-top: 1.25rem;
+  }
+
+  .page {
+    width: min(100% - 1.25rem, 1080px);
+  }
+
+  table.scorecard,
+  table.ledger {
+    display: block;
+    overflow-x: auto;
   }
 }
