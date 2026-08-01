@@ -57,6 +57,7 @@ def _baseline(nights: list[dict[str, Any]]) -> dict[str, Any]:
         "duration_minutes": med("sleep", "duration_minutes"),
         "efficiency_percent": med("sleep", "efficiency_percent"),
         "awake_minutes": med("sleep", "awake_minutes"),
+        "respiratory_rate": med("sleep", "respiratory_rate"),
     }
 
 
@@ -70,6 +71,10 @@ _DEVIATIONS: tuple[tuple[str, str, str, float, str], ...] = (
     ("sleep", "duration_minutes", "below", 75, "slept {v} min against their usual {b}"),
     ("sleep", "efficiency_percent", "below", 6, "sleep efficiency {v}% against {b}%"),
     ("sleep", "awake_minutes", "above", 35, "{v} min awake against their usual {b}"),
+    # Respiratory rate is among the steadiest things a strap measures — it varies by a few tenths
+    # of a breath night to night — so a rise of more than a breath and a half is a large move,
+    # and it tends to arrive early. Nonspecific as to cause, like everything else here.
+    ("sleep", "respiratory_rate", "above", 1.5, "breathing {v} a minute against their usual {b}"),
 )
 
 # Values that are worth surfacing whatever this patient's baseline is, because they are dangerous
