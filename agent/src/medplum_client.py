@@ -6,6 +6,7 @@ Docs: https://www.medplum.com/docs/fhir-datastore/binary-data
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -13,6 +14,8 @@ from uuid import uuid4
 import httpx
 
 from .config import Settings, get_settings
+
+logger = logging.getLogger(__name__)
 
 # Process-wide mock CDR so API requests share Patient/Encounter/photo state
 _MOCK_STORE: dict[str, list[dict[str, Any]]] = {
@@ -64,6 +67,18 @@ class MedplumService:
                 base_url=self.settings.medplum_base_url,
                 client_id=self.settings.medplum_client_id,
                 client_secret=self.settings.medplum_client_secret,
+                # A self-hosted server on localhost is plain HTTP; without this the client
+                # refuses to talk to it.
+                allow_insecure_http=self.settings.medplum_base_url.startswith("http://"),
+            )
+        elif not self.settings.use_mock:
+            # AGENT_MODE=live but no credentials: we fall back to the in-memory store, which
+            # looks identical in the UI apart from a "(mock)" suffix. Say so once, loudly,
+            # rather than letting someone demo against a store that vanishes on restart.
+            logger.warning(
+                "AGENT_MODE is live but MEDPLUM_CLIENT_ID/SECRET are empty — charting to the "
+                "in-memory mock. Set both (and MEDPLUM_BASE_URL for a self-hosted server) to "
+                "persist to a real FHIR server."
             )
 
     @property

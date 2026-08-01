@@ -1,0 +1,21 @@
+# Local-development overrides for Medplum's own full-stack compose file.
+#
+# Kept here rather than edited into infra/medplum/ because that directory is a verbatim copy of
+# upstream (see infra/README.md) and should stay diffable against it.
+#
+# Usage:
+#   docker compose -f infra/medplum/docker-compose.full-stack.yml \
+#                  -f infra/medplum-local.override.yml up -d
+#
+# What this changes and why:
+#   Upstream ships Medplum's public reCAPTCHA test keys. With them set the server demands a
+#   recaptchaToken on /auth/newuser, which a scripted bootstrap cannot produce. Blanking them
+#   turns the check off so a project can be created from the command line.
+#
+# Local only. Do not reuse this against anything reachable from the internet.
+
+services:
+  medplum-server:
+    environment:
+      MEDPLUM_RECAPTCHA_SITE_KEY: ''
+      MEDPLUM_RECAPTCHA_SECRET_KEY: ''
