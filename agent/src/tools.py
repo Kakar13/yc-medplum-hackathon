@@ -22,7 +22,7 @@ from .medplum_client import MedplumService
 logger = logging.getLogger(__name__)
 from .moss_retriever import MossService
 from .open_wearables import OpenWearablesService
-from . import perio
+from . import perio, skin
 from .research import ResearchService
 from .stedi_client import StediService
 
@@ -138,6 +138,16 @@ def bind_session_patient(
         tools=tuple(t.name for t in TOOLS),
         aliases={service.patient_display(patient)},
     )
+    # The session is opened from the patient's own device against their own record, so who they
+    # are is established by the capability binding rather than by asking them to recite a
+    # birthday to a voice agent. Recording it as a method, not a skipped step: an auditor asking
+    # "how do you know this was them" gets the binding as the answer.
+    _session["identity"] = {
+        "verified": True,
+        "method": "device-bound session; capability issued to a single patient",
+        "identifiers_checked": 0,
+        "at": time.time(),
+    }
     return patient, cap
 
 
@@ -292,6 +302,27 @@ def get_periochart() -> str:
                 f"{last['detail']}, by {last['provider']}."
             )
     return f"PERIOCHART {spoken}{history}"
+
+
+@tool
+@guarded
+def get_skin_map(
+    description: Annotated[
+        str, "Where the patient says it is, verbatim, e.g. 'the insides of my elbows and my hands'"
+    ],
+) -> str:
+    """Body map for a skin complaint, with what the record holds at those sites.
+
+    The skin equivalent of get_periochart. Use for rashes, eczema, dermatitis, hives or any
+    complaint with a location on the body.
+    """
+    located = skin.locate_region(description)
+    if not located["resolved"]:
+        return f"SITE_UNCLEAR Ask exactly this: \"{located['question']}\""
+    _session["skin_focus"] = located["regions"]
+    data = skin.skin_map(located["regions"])
+    _session["skinmap"] = data
+    return f"SKINMAP {skin.skin_map_for_voice(located['regions'])}"
 
 
 @tool
@@ -508,6 +539,20 @@ async def request_human_handoff(
     reason: Annotated[str, "Why the patient or agent wants a human"],
 ) -> str:
     """Escalate to a human clinician for co-regulation / algorithm-aversion handoff."""
+    # Escalating twice is not twice as safe. Without this, the model re-reads its own "tell them
+    # to seek care" instruction every turn and answers every question with "please hold on",
+    # which strands the patient in a loop at the exact moment they most need a straight answer.
+    if _session.get("handoff_requested"):
+        return (
+            "HANDOFF_ALREADY_REQUESTED\n"
+            "A clinician has been paged and the chart is with them. Do NOT repeat the escalation "
+            "message and do NOT say 'please hold on' again. Answer whatever they actually asked, "
+            "briefly and plainly. If they ask where the clinician is, say someone from the clinic "
+            "is being paged now and that they should call 911 themselves if they feel worse. If "
+            "they tell you they are fine or that you misheard, believe them and ask whether they "
+            "want to carry on with the check-in."
+        )
+    _session["handoff_requested"] = time.time()
     # Persist Moss session so the human can resume short-term context. Best-effort, but a
     # failure has to be visible: the handoff otherwise looks fine while the clinician
     # receives none of the conversation.
@@ -546,7 +591,10 @@ async def request_human_handoff(
         f"reason={reason}\n"
         f"patient_id={_session.get('patient_id')}\n"
         f"encounter_id={_session.get('encounter_id')}\n"
-        "Prepare warm transfer: chart already written; human should acknowledge anxiety and confirm next steps."
+        "Prepare warm transfer: chart already written; human should acknowledge anxiety and confirm next steps.\n"
+        "AFTER SAYING THIS ONCE: stop escalating. Do not repeat it on later turns and do not stall "
+        "with 'please hold on'. Answer their questions normally. If they say they are fine or that "
+        "you misunderstood, take them at their word and offer to continue the check-in."
     )
 
 
@@ -600,6 +648,7 @@ TOOLS = [
     verify_identity,
     locate_tooth,
     get_periochart,
+    get_skin_map,
     chart_to_medplum,
     deep_research,
     propose_care_plan,

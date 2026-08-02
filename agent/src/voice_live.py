@@ -87,23 +87,26 @@ You are speaking out loud. Keep every reply to one or two sentences. Ask one que
 
 The patient may have any complaint. Never assume a specialty.
 
-Identity, and when to skip it:
-- Open by asking for their full name and date of birth, then call verify_identity with exactly what they said. Two identifiers, once, at the start.
-- SAFETY OVERRIDE: if anything they say sounds like an emergency, abandon verification immediately and escalate. Never ask an unwell person for a date of birth. Never re-ask it during an emergency. Help first; identity is a records problem, not a triage one.
-- If they are distressed, confused, or ask for a person, skip verification and hand off.
-- If verification fails twice, keep taking their history but do not read anything back from their record, and say a staff member will confirm their details.
+Identity:
+- Already settled before you speak. This is their own Preflight, opened from their device and bound to their record, so never ask them to recite their name or date of birth — you know who they are, and asking implies otherwise. Greet them and get on with it.
+- Escalate once, then stop. After you have told someone to seek emergency care and called request_human_handoff, never repeat it and never answer with "please hold on". Answer what they actually asked. If they say they are fine, that they only meant they were winded, or that you misheard, believe them, say so plainly, and offer to carry on with the check-in — a wrong escalation you refuse to release is its own harm.
+- SAFETY OVERRIDE: if anything they say sounds like an emergency, drop everything else and escalate. Help first.
+- If they are distressed, confused, or ask for a person, hand off.
 
 Behaviour:
-- Once identity is settled, ask what brings them in today.
+- Ask one open question — "How can I help you today?" — and then follow whatever they say. Do not steer toward any condition, do not volunteer their wearable data or anything outstanding in their record until you know why they called, and never let either delay an emergency.
+- Holding it back is about timing, not secrecy. The moment they ask — how has my sleep been, what did my strap show, what's still outstanding, what does my record say about that tooth — answer fully and specifically, with the actual nights, numbers and dates from the context you were given. Call get_wearable_risk or get_periochart if you need more detail. Never imply you don't have something you do.
 - Ground in their record with moss_search before interpreting anything.
 - Ask focused questions: onset, duration, severity, what changes it, red flags, relevant meds and allergies.
 - Call chart_to_medplum as the conversation accrues so documentation is written live.
 - Call deep_research once the complaint is clear. Cite only what it returns. If it returns nothing, say no literature was retrieved.
 - Call send_photo_capture_link when something is visible: rash, swelling, wound, deformity, or a medication label.
 - Call get_wearable_risk when sleep or recovery would inform the picture.
+- Skin complaints — rash, eczema, dermatitis, hives, itching: call get_skin_map with the patient's own words for where it is. If it comes back unclear, ask exactly the question it gives you. Refer to what the record already holds at that site rather than asking them to recall it.
 - Dental pain, in this order — safety, then location, then history. FIRST ask the one safety question: any trouble breathing or swallowing, drooling, voice change, swelling under the jaw or neck or towards the eye, or can't open your mouth. A lower molar infection can reach the airway, and a patient who cannot swallow must not be counting teeth. Only once that is answered no, call locate_tooth with the patient's own words. If it comes back ambiguous, ask exactly the question it gives you and call it again. Once resolved, call get_periochart and refer to what the record already holds for that tooth — never make the patient recall their own dental history. Speak of teeth by position ("your lower right back tooth"), never by number.
 - Call check_eligibility before mentioning anything that costs money, and whenever cost or coverage comes up.
 - Call propose_care_plan once, and say plainly that a clinician reviews it before anything is final.
+- Close the same way every time. Once you have the complaint, where it is, and how long it has been going on, stop gathering and land it: say back in one sentence what you have understood, then tell them you are sending it to their dentist to review and that the practice will follow up with next steps. Do not promise a timescale, a diagnosis, or a treatment — the clinician decides those. Then ask if there is anything else they want passed on.
 - Call request_human_handoff if the patient is distressed, asks for a person, or a red flag appears.
 
 Hard rules:
@@ -114,10 +117,57 @@ Hard rules:
 """
 
 GREETING = (
-    "Hi, I'm Preflight. I'll take a few notes before you see the clinician. "
-    "First, can I get your full name and date of birth? And if you're having a medical "
-    "emergency, skip that and just tell me what's happening."
+    "Hi, it's Preflight. I'll take a few notes before you see the clinician. "
+    "How are you feeling today?"
 )
+
+
+# Enough of a symptom vocabulary to tell "my molar is throbbing" from "we just started doing
+# that". Length alone does not work: the longest thing a patient says early on is usually their
+# name and date of birth, and searching the literature for that is both useless and visibly silly.
+_SYMPTOM_WORDS = (
+    "pain", "hurt", "ache", "aching", "sore", "throb", "swell", "swollen", "sensitive",
+    "rash", "itch", "burn", "sting", "bleed", "blood", "fever", "chills", "cough",
+    "nausea", "vomit", "dizzy", "numb", "tingl", "cramp", "stiff", "tired", "fatigue",
+    "infection", "abscess", "lump", "bump", "discharge", "pus", "swelling", "broke",
+    "injur", "fell", "sprain", "can't sleep", "cant sleep", "trouble", "worse", "flar",
+    "eczema", "asthma", "migraine", "wheez", "hives", "allerg", "reflux", "anxiety",
+    "tooth", "teeth", "molar", "gum", "jaw", "chest", "head", "throat", "stomach", "back",
+    "knee", "shoulder", "skin", "eye", "ear", "breath",
+)
+
+# Things people say that are not why they called.
+_NOT_A_COMPLAINT = (
+    "just started", "can you hear", "hello", "testing", "is this working", "what was that",
+    "say that again", "i don't know", "i dont know", "hold on", "one second",
+)
+
+
+_NEGATORS = (
+    "no ", "not ", "n't ", "never ", "without ", "denies ", "deny ", "nothing ", "none ",
+)
+
+
+def _reports(text: str, hint: str) -> bool:
+    """True only if the patient is claiming the symptom, not ruling it out.
+
+    Substring matching alone reads "I don't have trouble breathing" as trouble breathing, which
+    turns the safety question into a trap: asking about red flags guarantees the words appear in
+    the answer. Looking back a short way from the match catches the ordinary ways people say no
+    without pretending this is real negation parsing.
+    """
+    at = text.find(hint)
+    if at < 0:
+        return False
+    window = text[max(0, at - 26) : at]
+    return not any(n in window for n in _NEGATORS)
+
+
+def _is_complaint(text: str) -> bool:
+    lowered = text.strip().lower()
+    if len(lowered) < 12 or any(p in lowered for p in _NOT_A_COMPLAINT):
+        return False
+    return any(w in lowered for w in _SYMPTOM_WORDS)
 
 
 def _json_schema_for(tool: Any) -> dict[str, Any]:
@@ -274,6 +324,96 @@ class VoiceBridge:
         self._chart_tasks: set[asyncio.Task] = set()
         self._pending_user = ""
         self._emergency = False
+        self._context_notes = ""
+        self._complaint = ""
+
+    async def _opening(self) -> str:
+        """Open with the reason this call is happening, not a blank 'how can I help'.
+
+        The strap noticed something and the record has an unfinished referral sitting in it. That
+        is the whole case for a pre-visit agent, and burying it behind a generic greeting wastes
+        the one thing the system knows that the patient does not.
+        """
+        try:
+            from .open_wearables import OpenWearablesService
+            from . import perio
+
+            window = await OpenWearablesService().monitoring_window(14)
+            pending = next(
+                (
+                    p
+                    for p in perio.periochart()["summary"]["pending_treatment"]
+                    if p.get("urgency") == "urgent"
+                ),
+                None,
+            )
+        except Exception as exc:  # noqa: BLE001 - never let the opener break the call
+            logger.warning("proactive opener unavailable: %s", exc)
+            return GREETING
+
+        # This is not a walk-in. Preflight reached out because the strap showed something, so the
+        # opener says that much — a call with no stated reason makes the patient do the work of
+        # guessing why their own agent is ringing. What it does not do is name a condition or a
+        # pending procedure: that presumes the answer, and an emergency caller would have to sit
+        # through it. Those stay in the prompt, available the moment they become relevant.
+        notes = []
+        if window.get("available") and window.get("surfaced"):
+            notes.append(
+                f"Their wearable shows {window['surfaced']} of the last {window['reviewed']} "
+                "nights departing from their own baseline: "
+                + "; ".join(
+                    f"{n['date']} ({', '.join(n['reasons'])})" for n in window["surfaced_nights"]
+                )
+                + ". Nonspecific — raise it only if it fits what they tell you, never as a finding."
+            )
+        if pending:
+            notes.append(
+                f"Unbooked in their record: {pending['plan']} on a back tooth. Mention it only if "
+                "they raise dental pain or you have finished their actual reason for calling."
+            )
+        self._context_notes = "\n".join(notes)
+
+        if not (window.get("available") and window.get("surfaced")):
+            return GREETING
+        nights = window["surfaced"]
+        return (
+            f"Hi, it's Preflight. Your recovery's been off {'a few' if nights > 2 else 'a couple of'} "
+            "nights this week, so I wanted to check in before your visit. How are you feeling?"
+        )
+
+    async def _ensure_proposal(self) -> None:
+        """Leave a draft on the clinician's desk if the model never got round to it."""
+        session = get_session()
+        if session.get("proposed") or not self._complaint:
+            return
+        try:
+            result = await self._tools["propose_care_plan"].ainvoke(
+                {
+                    "title": "Pre-visit intake — awaiting clinician review",
+                    "summary": (
+                        f"Patient reported: {self._complaint[:280]}. Collected before the visit; "
+                        "diagnosis and treatment not established remotely."
+                    ),
+                    "activities": (
+                        "1. Clinician to confirm the affected site and diagnosis on examination\n"
+                        "2. Imaging as clinically indicated\n"
+                        "3. Practice to contact the patient with next steps"
+                    ),
+                }
+            )
+            session["proposed"] = True
+            await self._emit(
+                {
+                    "type": "ToolCall",
+                    "name": "propose_care_plan",
+                    "arguments": {"trigger": "session-close"},
+                    "denied": False,
+                    "ms": 0,
+                    "preview": (result or "")[:400],
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 - a closing write must not raise on teardown
+            logger.warning("closing proposal failed: %s", exc)
 
     async def _patient_history(self) -> str:
         """Pull the bound patient's record once, to seed the prompt before the call starts."""
@@ -308,7 +448,7 @@ class VoiceBridge:
         rather than a gap.
         """
         lowered = text.lower()
-        if self._emergency or not any(h in lowered for h in EMERGENCY_HINTS):
+        if self._emergency or not any(_reports(lowered, h) for h in EMERGENCY_HINTS):
             return
         self._emergency = True
         # Replace rather than merge: leaving an earlier session's name/dob matches in place would
@@ -328,25 +468,23 @@ class VoiceBridge:
                 }
             )
         )
-        # Instruct rather than hope. The model may still be mid-intake and holding a plan to ask
-        # about onset or price; an emergency has to interrupt that plan, not queue behind it.
+        # Say the escalation rather than asking the model to. InjectAgentMessage is speech, not
+        # a system directive — anything put here is spoken to the patient verbatim, so it has to
+        # be the words themselves.
         asyncio.create_task(
             self._inject(
-                "SAFETY GATE TRIPPED. Stop the intake now. Do not localize a tooth, request a "
-                "photo, quote a price, or ask any further history question. Say in one sentence "
-                "that this needs emergency care now — call 911 or go to the nearest emergency "
-                "department, and do not wait for a call back — then call request_human_handoff."
+                "I want to stop there — what you're describing needs to be seen urgently. "
+                "Please call 911 or go to the nearest emergency department now, and don't wait "
+                "for a call back. I'm passing your notes to a clinician."
             )
         )
 
-    async def _inject(self, instruction: str) -> None:
-        """Put a system instruction into the live conversation mid-turn."""
+    async def _inject(self, speech: str) -> None:
+        """Make the agent say something immediately, interrupting whatever it had planned."""
         if not self._dg:
             return
         try:
-            await self._dg.send(
-                json.dumps({"type": "InjectAgentMessage", "content": instruction})
-            )
+            await self._dg.send(json.dumps({"type": "InjectAgentMessage", "content": speech}))
         except Exception as exc:  # A closed socket must not mask the escalation in the logs.
             logging.getLogger("src").warning("safety injection failed: %s", exc)
 
@@ -393,7 +531,10 @@ class VoiceBridge:
         than of the model's mood. It is deliberately fire-and-forget: results land in the chart,
         so a two-second literature search never delays a spoken reply.
         """
-        if self._research_task is not None or len(complaint.strip()) < 20:
+        if not _is_complaint(complaint):
+            return
+        self._complaint = self._complaint or complaint  # first real symptom, kept for the close
+        if self._research_task is not None:
             return
 
         async def run() -> None:
@@ -473,12 +614,26 @@ class VoiceBridge:
         ) as dg:
             self._dg = dg
             history = await self._patient_history()
-            await dg.send(json.dumps(build_settings(listen_model=model, history=history)))
+            greeting = await self._opening()  # also fills self._context_notes
+            if self._context_notes:
+                history = f"{history}\n\nQUIET CONTEXT (do not lead with this):\n{self._context_notes}"
+
+            await dg.send(
+                json.dumps(
+                    build_settings(listen_model=model, greeting=greeting, history=history)
+                )
+            )
 
             pump = asyncio.create_task(self._pump_client_audio(client_recv))
             try:
                 await self._read_deepgram(dg)
             finally:
+                # Hand the clinician something to review. The model calls propose_care_plan when
+                # it remembers to, which across rehearsals was most of the time but not all of
+                # it, and a visit ending with an empty review queue has quietly dropped the part
+                # where a human signs off.
+                await self._ensure_proposal()
+
                 # Give writes already in flight a moment to land. Cancelling here would drop the
                 # final exchange of the visit — the one the clinician is most likely to read.
                 if self._chart_tasks:

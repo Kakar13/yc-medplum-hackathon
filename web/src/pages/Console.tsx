@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type ChartPayload } from '../api';
+import { BodyMap } from '../components/BodyMap';
 import { PerioChart } from '../components/PerioChart';
+import { Source } from '../components/Source';
+import { RecoveryTrend } from '../components/RecoveryTrend';
 import { VitalsViz } from '../components/VitalsViz';
 import {
   VoiceClient,
@@ -50,6 +53,7 @@ export function Console() {
   const [notice, setNotice] = useState('');
   const [muted, setMuted] = useState(false);
   const [typed, setTyped] = useState('');
+  const [agentOpen, setAgentOpen] = useState(false);
 
   const client = useRef<VoiceClient | null>(null);
   const transcriptEnd = useRef<HTMLDivElement | null>(null);
@@ -144,6 +148,15 @@ export function Console() {
               {latency.median_ms ? <em> · median {latency.median_ms}</em> : null}
             </span>
           ) : null}
+          <button
+            type="button"
+            className={`agent-toggle ${agentOpen ? 'on' : ''}`}
+            onClick={() => setAgentOpen((v) => !v)}
+            aria-expanded={agentOpen}
+          >
+            Agent
+            {tools.length ? <span className="count">{tools.length}</span> : null}
+          </button>
           <nav className="head-links">
             <Link to="/review">Review queue</Link>
             <Link to="/trust">Trust</Link>
@@ -154,7 +167,7 @@ export function Console() {
       {error ? <p className="banner error">{error}</p> : null}
       {notice ? <p className="banner notice">{notice}</p> : null}
 
-      <div className="triptych">
+      <div className="duo">
         {/* ── Patient ─────────────────────────────────────────────── */}
         <section className="pane patient" aria-label="Patient">
           <div className="pane-head">
@@ -239,19 +252,42 @@ export function Console() {
             </div>
           ) : null}
 
+          {chart?.monitoring?.available ? (
+            <div className="patient-block">
+              <h3>
+                Your last two weeks
+                <Source from="Whoop" detail="your own baseline" />
+              </h3>
+              <RecoveryTrend monitoring={chart.monitoring} />
+            </div>
+          ) : null}
+
           {chart?.eligibility ? (
             <div className="patient-block cost">
-              <h3>What this should cost you</h3>
+              <h3>
+                What this should cost you
+                <Source from="Stedi" detail="live 270/271 eligibility" />
+              </h3>
               <p>{chart.eligibility}</p>
             </div>
           ) : null}
         </section>
 
-        {/* ── Agent ───────────────────────────────────────────────── */}
-        <section className="pane agent" aria-label="Agent activity">
+        {/* ── Agent ───────────────────────────────────────────────
+            A drawer, not a column. What the agent did matters when you go looking for it and
+            is noise the rest of the time, and it was taking a third of the screen from the two
+            views anyone actually reads. */}
+        <section
+          className={`pane agent drawer ${agentOpen ? 'open' : ''}`}
+          aria-label="Agent activity"
+          aria-hidden={!agentOpen}
+        >
           <div className="pane-head">
             <h2>Agent</h2>
             <span className={`pane-tag state-${state}`}>{state}</span>
+            <button type="button" className="drawer-close" onClick={() => setAgentOpen(false)}>
+              Close
+            </button>
           </div>
 
           <dl className="facts">
@@ -328,9 +364,52 @@ export function Console() {
             )}
           </div>
 
+          {/* The first thing on the screen answers "what do I have to do, and by when".
+              Everything below it is the evidence for that answer. */}
+          {chart?.periochart?.alert && (
+            <div className={`triage-lead ${chart.periochart.alert.status}`}>
+              <div className="triage-tier">
+                {chart.periochart.alert.status === 'urgent'
+                  ? 'Same-day dental review'
+                  : 'Prompt dental review'}
+                <span className="triage-when">
+                  {chart.periochart.alert.status === 'urgent' ? 'today' : 'within 24 hours'}
+                </span>
+              </div>
+              <p className="triage-why">{chart.periochart.alert.headline}</p>
+              <p className="triage-unknown">
+                Causative tooth, pulpal diagnosis and need for drainage remain unconfirmed —
+                examination and imaging required.
+              </p>
+            </div>
+          )}
+
+          {chart?.periochart && (
+            <div className="clin-block">
+              <h3>
+                Dental chart
+                <Source from="Medplum" detail="FHIR record" />
+              </h3>
+              <PerioChart chart={chart.periochart} />
+            </div>
+          )}
+
+          {chart?.skinmap && (
+            <div className="clin-block">
+              <h3>
+                Skin sites
+                <Source from="Medplum" detail="FHIR record" />
+              </h3>
+              <BodyMap map={chart.skinmap} />
+            </div>
+          )}
+
           {chart?.monitoring?.available && (
             <div className="clin-block">
-              <h3>Passive monitoring</h3>
+              <h3>
+                Passive monitoring
+                <Source from="Whoop" detail="14 nights, filtered" />
+              </h3>
               <div className="monitor-summary">
                 <span className="monitor-count">
                   <strong>{chart.monitoring.reviewed}</strong> nights reviewed
@@ -365,15 +444,11 @@ export function Console() {
             </div>
           )}
 
-          {chart?.periochart && (
-            <div className="clin-block">
-              <h3>Periodontal chart</h3>
-              <PerioChart chart={chart.periochart} />
-            </div>
-          )}
-
           <div className="clin-block">
-            <h3>Note, written live</h3>
+            <h3>
+              Note, written live
+              <Source from="Medplum" detail="FHIR Composition" />
+            </h3>
             {note ? (
               <article className="note">
                 <p className="note-title">{String((note as Record<string, unknown>).title ?? 'Intake note')}</p>
@@ -385,7 +460,10 @@ export function Console() {
           </div>
 
           <div className="clin-block">
-            <h3>Proposed plan (n=1)</h3>
+            <h3>
+              Proposed plan (n=1)
+              <Source from="Medplum" detail="draft CarePlan + review Task" />
+            </h3>
             {proposal ? (
               <article className="proposal-card">
                 <header>
@@ -418,7 +496,10 @@ export function Console() {
           </div>
 
           <div className="clin-block">
-            <h3>Evidence</h3>
+            <h3>
+              Evidence
+              <Source from="Europe PMC" detail="retrieved literature" />
+            </h3>
             {chart?.research?.length ? (
               <ol className="cites">
                 {chart.research.map((c, i) => (

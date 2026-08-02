@@ -340,6 +340,42 @@ def periochart(focus_tooth: int | None = None) -> dict[str, Any]:
             }
         )
 
+    # Every tooth in the mouth, including the sound ones, because an odontogram is read by
+    # scanning the whole arch for what stands out. A chart showing only the problem teeth removes
+    # exactly the comparison that makes a problem tooth look like one.
+    arches = []
+    for number, name, quadrant in _TEETH:
+        finding = _FINDINGS.get(number, {})
+        restoration = (finding.get("restoration") or "").lower()
+        if "crown" in restoration:
+            kind = "crown"
+        elif "amalgam" in restoration:
+            kind = "amalgam"
+        elif "composite" in restoration:
+            kind = "composite"
+        else:
+            kind = ""
+        arches.append(
+            {
+                "number": number,
+                "name": name,
+                "quadrant": quadrant,
+                "label": tooth_label(number),
+                "present": number in PRESENT,
+                "restoration_kind": kind,
+                # Endodontic treatment is drawn inside the root, not on the crown, so the chart
+                # shows a treated tooth differently from a filled one.
+                "root_canal": "root canal" in " ".join(
+                    e.get("event", "").lower() for e in finding.get("history", [])
+                ),
+                "problem": finding.get("status") in {"urgent", "watch"},
+                "status": finding.get("status", "ok"),
+                "max_depth_mm": max(_DEPTHS.get(number, [2])),
+                "bleeding": number in _BLEEDING,
+                "focus": number == focus_tooth,
+            }
+        )
+
     advanced = [t for t in teeth if t["severity"] == "deep"]
     early = [t for t in teeth if t["severity"] == "moderate"]
     focus = next((t for t in teeth if t["number"] == focus_tooth), None)
@@ -370,6 +406,7 @@ def periochart(focus_tooth: int | None = None) -> dict[str, Any]:
             else None
         ),
         "teeth": teeth,
+        "arch": arches,
         "summary": {
             "deep_pocket_sites": [t["number"] for t in advanced],
             "moderate_pocket_sites": [t["number"] for t in early],

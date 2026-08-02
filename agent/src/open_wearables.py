@@ -113,12 +113,19 @@ def _against_baseline(night: dict[str, Any], baseline: dict[str, Any]) -> dict[s
 
     # One metric drifting is noise; two moving together on the same night is a pattern.
     level = "high" if score >= 3 else "moderate" if score >= 2 else "low"
+    recovery = night.get("recovery") or {}
+    sleep = night.get("sleep") or {}
     return {
         "date": night["date"],
         "level": level,
         "score": score,
         "reasons": reasons,
         "surfaced": score >= 2,
+        # Carried through for the patient's own chart. A person shown "3 nights surfaced" learns
+        # nothing; a person shown the shape of their own fortnight can see it for themselves.
+        "recovery_score": recovery.get("recovery_score"),
+        "duration_minutes": sleep.get("duration_minutes"),
+        "resting_heart_rate_bpm": recovery.get("resting_heart_rate_bpm"),
     }
 
 

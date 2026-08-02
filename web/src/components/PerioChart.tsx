@@ -1,4 +1,5 @@
 import type { Periochart } from '../api';
+import { Odontogram } from './Odontogram';
 
 // Named after what was measured, not what it might mean. Probing depth alone does not
 // establish attachment loss or a periodontal stage.
@@ -28,6 +29,8 @@ export function PerioChart({ chart }: { chart: Periochart }) {
           {chart.alert.known_history && <p className="sub">{chart.alert.known_history}</p>}
         </div>
       )}
+
+      {chart.arch?.length ? <Odontogram arch={chart.arch} /> : null}
 
       <div className="perio-grid">
         {chart.teeth.map((t) => (

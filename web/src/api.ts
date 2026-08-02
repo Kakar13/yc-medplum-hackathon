@@ -47,6 +47,7 @@ export type ChartPayload = {
   research?: Citation[];
   capability?: Capability | null;
   periochart?: Periochart | null;
+  skinmap?: SkinMap | null;
   monitoring?: Monitoring | null;
 };
 
@@ -85,6 +86,9 @@ export type MonitoringNight = {
   score: number;
   reasons: string[];
   surfaced: boolean;
+  recovery_score?: number | null;
+  duration_minutes?: number | null;
+  resting_heart_rate_bpm?: number | null;
 };
 
 export type Monitoring = {
@@ -113,6 +117,45 @@ export type PerioTooth = {
   focus: boolean;
 };
 
+export type SkinRegion = {
+  key: string;
+  site: string;
+  x: number;
+  y: number;
+  severity: string;
+  history: { date: string; event: string; detail: string; provider: string }[];
+  prior_events: number;
+  focus: boolean;
+  new_site: boolean;
+};
+
+export type SkinMap = {
+  regions: SkinRegion[];
+  alert: {
+    site: string;
+    headline: string;
+    known_history: string;
+    prior_events: number;
+    status: string;
+  } | null;
+  allergies: string[];
+  summary: { affected_now: string[]; previously_affected: string[] };
+};
+
+export type ArchTooth = {
+  number: number;
+  name: string;
+  label: string;
+  present: boolean;
+  restoration_kind: '' | 'composite' | 'amalgam' | 'crown';
+  root_canal: boolean;
+  problem: boolean;
+  status: string;
+  max_depth_mm: number;
+  bleeding: boolean;
+  focus: boolean;
+};
+
 export type Periochart = {
   system: string;
   months_since_prophylaxis: number;
@@ -126,6 +169,7 @@ export type Periochart = {
     prior_events: number;
   } | null;
   teeth: PerioTooth[];
+  arch: ArchTooth[];
   summary: {
     deep_pocket_sites: number[];
     pending_treatment: { tooth: number; plan: string; urgency: string }[];
