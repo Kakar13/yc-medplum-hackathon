@@ -47,36 +47,25 @@ MAX_TOOL_FAILURES = 3
 
 # Terms Nova/Flux would otherwise guess at. Clinical vocabulary is exactly where a general STT
 # model degrades, and a misheard drug name is a charting error, not a typo.
+# Keep this short. Keyterms have a token budget; a long list is more likely to get rejected
+# than to help, and dental/skin vocabulary is what this demo actually needs heard correctly.
 CLINICAL_KEYTERMS = [
     "eczema",
     "atopic dermatitis",
     "triamcinolone",
-    "albuterol",
-    "prednisone",
-    "ibuprofen",
-    "acetaminophen",
-    "amoxicillin",
-    "lisinopril",
-    "metformin",
-    "sertraline",
-    "omeprazole",
+    "abscess",
+    "periapical",
+    "radiolucency",
+    "root canal",
+    "molar",
+    "Ludwig's angina",
+    "drooling",
     "dyspnea",
     "shortness of breath",
-    "palpitations",
-    "syncope",
-    "paresthesia",
-    "erythema",
+    "anaphylaxis",
     "pruritus",
     "urticaria",
-    "cellulitis",
-    "effusion",
-    "meniscus",
-    "patellar",
-    "plantar fasciitis",
-    "sciatica",
-    "migraine",
-    "photophobia",
-    "anaphylaxis",
+    "antecubital",
     "HRV",
     "SpO2",
 ]
@@ -326,6 +315,10 @@ class VoiceBridge:
         self._emergency = False
         self._context_notes = ""
         self._complaint = ""
+        # Deepgram rejects audio (and InjectUserMessage) until SettingsApplied. Streaming the
+        # mic the moment the socket opens is what produces the STT Error flood — see
+        # https://developers.deepgram.com/docs/voice-agent-message-flow
+        self._audio_ready = asyncio.Event()
 
     async def _opening(self) -> str:
         """Open with the reason this call is happening, not a blank 'how can I help'.
@@ -605,24 +598,34 @@ class VoiceBridge:
 
     async def _session(self, client_recv: Callable, model: str) -> None:
         s = get_settings()
+        self._audio_ready.clear()
+
+        # Build the Settings payload before opening the socket. Deepgram expects Settings
+        # immediately after Welcome — fetching Whoop/Moss after Welcome is how you get
+        # CLIENT_MESSAGE_TIMEOUT and a dead mic.
+        history = await self._patient_history()
+        greeting = await self._opening()  # also fills self._context_notes
+        if self._context_notes:
+            history = f"{history}\n\nQUIET CONTEXT (do not lead with this):\n{self._context_notes}"
+        settings_frame = build_settings(
+            listen_model=model, greeting=greeting, history=history
+        )
+
         async with websockets.connect(
             AGENT_WS_URL,
             additional_headers={"Authorization": f"Token {s.deepgram_api_key}"},
             max_size=None,
-            ping_interval=5,
-            ping_timeout=20,
+            # Deepgram's own KeepAlive covers idle audio; websocket pings that are too
+            # aggressive trip 1011 keepalive timeouts when the LLM is thinking.
+            ping_interval=20,
+            ping_timeout=60,
         ) as dg:
             self._dg = dg
-            history = await self._patient_history()
-            greeting = await self._opening()  # also fills self._context_notes
-            if self._context_notes:
-                history = f"{history}\n\nQUIET CONTEXT (do not lead with this):\n{self._context_notes}"
 
-            await dg.send(
-                json.dumps(
-                    build_settings(listen_model=model, greeting=greeting, history=history)
-                )
-            )
+            # Protocol: Welcome → Settings → SettingsApplied → then audio.
+            # https://developers.deepgram.com/docs/voice-agent-message-flow
+            await self._await_welcome(dg)
+            await dg.send(json.dumps(settings_frame))
 
             pump = asyncio.create_task(self._pump_client_audio(client_recv))
             try:
@@ -648,12 +651,39 @@ class VoiceBridge:
                     except (asyncio.CancelledError, Exception):
                         pass
 
+    async def _await_welcome(self, dg: Any) -> None:
+        """Block until Deepgram confirms the socket. Settings must not precede this."""
+        deadline = time.perf_counter() + 10
+        while time.perf_counter() < deadline:
+            raw = await asyncio.wait_for(dg.recv(), timeout=max(0.1, deadline - time.perf_counter()))
+            if isinstance(raw, bytes):
+                continue
+            try:
+                event = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            kind = event.get("type")
+            if kind == "Welcome":
+                logger.info("Deepgram Welcome request_id=%s", event.get("request_id"))
+                return
+            if kind == "Error":
+                message = event.get("description") or event.get("message") or json.dumps(event)
+                raise _SettingsRejected(message)
+            logger.debug("pre-Welcome event: %s", kind)
+        raise _SettingsRejected("Timed out waiting for Deepgram Welcome")
+
     async def _pump_client_audio(self, client_recv: Callable) -> None:
-        """Browser → Deepgram. Straight relay: any work here shows up as latency."""
+        """Browser → Deepgram. Discard mic until SettingsApplied — early frames are STT Errors."""
         while True:
             msg = await client_recv()
             if msg is None:
                 break
+            if not self._audio_ready.is_set():
+                # Keep draining the browser socket so the buffer does not back up, but do not
+                # forward anything. Holding frames and dumping them later is almost as bad.
+                if isinstance(msg, dict) and msg.get("type") == "Stop":
+                    break
+                continue
             if isinstance(msg, bytes):
                 await self._dg.send(msg)
             elif isinstance(msg, dict):
@@ -696,13 +726,33 @@ class VoiceBridge:
         kind = event.get("type")
 
         if kind == "Error":
+            code = str(event.get("code") or "")
             message = event.get("description") or event.get("message") or json.dumps(event)
-            if "setting" in message.lower() or event.get("code") in {"INVALID_SETTINGS"}:
-                raise _SettingsRejected(message)
-            await self._emit({"type": "Error", "message": message})
+            logger.error("Deepgram Error code=%s desc=%s", code, message)
+            # Settings / listen failures are recoverable by retrying with nova-3.
+            if code in {
+                "INVALID_SETTINGS",
+                "FAILED_TO_START_LISTENING",
+                "NON_SETTINGS_MESSAGE_BEFORE_SETTINGS",
+            } or "setting" in message.lower():
+                raise _SettingsRejected(f"{code}: {message}" if code else message)
+            await self._emit(
+                {"type": "Error", "message": f"{code}: {message}" if code else message}
+            )
+            return
+
+        if kind == "Warning":
+            code = str(event.get("code") or "")
+            message = event.get("description") or event.get("message") or json.dumps(event)
+            logger.warning("Deepgram Warning code=%s desc=%s", code, message)
+            await self._emit(
+                {"type": "Notice", "message": f"{code}: {message}" if code else message}
+            )
             return
 
         if kind == "SettingsApplied":
+            # Mic frames held until this fires. Releasing early is what flooded STT Errors.
+            self._audio_ready.set()
             session = get_session()
             await self._emit(
                 {

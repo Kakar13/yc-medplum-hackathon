@@ -17,6 +17,7 @@
 const CAPTURE_RATE = 16000;
 const PLAYBACK_RATE = 24000;
 const FRAME_SAMPLES = 320; // 20 ms at 16 kHz
+const KEEPALIVE_MS = 8000; // Deepgram closes idle sockets; KeepAlive holds them open.
 
 // Worklet source is inlined as a Blob: it needs to ship with the bundle, and a separate public/
 // file is one more thing that can 404 in a deployment.
@@ -148,6 +149,9 @@ export class VoiceClient {
   private player = new PcmPlayer();
   private muted = false;
   private closing = false;
+  private ready = false;
+  private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+  private captureRate = CAPTURE_RATE;
 
   constructor(private url: string, private handlers: VoiceHandlers = {}) {}
 
@@ -157,6 +161,7 @@ export class VoiceClient {
 
   async start(): Promise<void> {
     this.closing = false;
+    this.ready = false;
     this.handlers.onState?.('connecting');
 
     // Playback context must be created during the user gesture that started the call, or
@@ -176,6 +181,7 @@ export class VoiceClient {
       ws.onopen = () => resolve();
       ws.onerror = () => reject(new Error('Could not reach the voice service'));
       ws.onclose = () => {
+        this.stopKeepAlive();
         if (!this.closing) this.handlers.onError?.('Voice connection closed');
         this.handlers.onClosed?.();
       };
@@ -195,12 +201,32 @@ export class VoiceClient {
     });
   }
 
+  private startKeepAlive(): void {
+    this.stopKeepAlive();
+    this.keepAliveTimer = setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'KeepAlive' }));
+      }
+    }, KEEPALIVE_MS);
+  }
+
+  private stopKeepAlive(): void {
+    if (this.keepAliveTimer) {
+      clearInterval(this.keepAliveTimer);
+      this.keepAliveTimer = null;
+    }
+  }
+
   private dispatch(msg: Record<string, unknown>): void {
     switch (msg.type) {
       case 'Bound':
         this.handlers.onBound?.(msg);
         break;
       case 'Ready':
+        // Mic + KeepAlive must wait for SettingsApplied on the server. Sending either earlier
+        // is NON_SETTINGS_MESSAGE_BEFORE_SETTINGS, which shows up as a pile of STT Errors.
+        this.ready = true;
+        this.startKeepAlive();
         this.handlers.onReady?.(msg);
         break;
       case 'Transcript': {
@@ -254,6 +280,7 @@ export class VoiceClient {
       ctx = new AudioContext();
     }
     this.captureCtx = ctx;
+    this.captureRate = ctx.sampleRate;
 
     const blob = new Blob([WORKLET_SOURCE], { type: 'application/javascript' });
     const workletUrl = URL.createObjectURL(blob);
@@ -267,14 +294,14 @@ export class VoiceClient {
     const node = new AudioWorkletNode(ctx, 'capture-processor');
     this.node = node;
 
-    // Decimation factor for browsers that would not honour a 16 kHz context.
-    const ratio = Math.max(1, Math.round(ctx.sampleRate / CAPTURE_RATE));
-
     node.port.onmessage = (evt) => {
       const { pcm, peak } = evt.data as { pcm: ArrayBuffer; peak: number };
       this.handlers.onLevel?.(peak);
-      if (this.muted || !this.connected) return;
-      this.ws!.send(ratio === 1 ? pcm : decimate(pcm, ratio));
+      // Gate on ready: Deepgram rejects audio that arrives before SettingsApplied.
+      if (this.muted || !this.connected || !this.ready) return;
+      const frame =
+        this.captureRate === CAPTURE_RATE ? pcm : resample(pcm, this.captureRate, CAPTURE_RATE);
+      this.ws!.send(frame);
     };
 
     source.connect(node);
@@ -288,7 +315,7 @@ export class VoiceClient {
 
   /** Type instead of talk — accessibility, and a reliable path on a noisy demo floor. */
   say(text: string): void {
-    if (!this.connected || !text.trim()) return;
+    if (!this.connected || !this.ready || !text.trim()) return;
     this.ws!.send(JSON.stringify({ type: 'InjectUserMessage', content: text }));
   }
 
@@ -299,6 +326,8 @@ export class VoiceClient {
 
   async stop(): Promise<void> {
     this.closing = true;
+    this.ready = false;
+    this.stopKeepAlive();
     if (this.connected) {
       try {
         this.ws!.send(JSON.stringify({ type: 'Stop' }));
@@ -320,10 +349,21 @@ export class VoiceClient {
   }
 }
 
-function decimate(buf: ArrayBuffer, ratio: number): ArrayBuffer {
+/** Linear resample. Integer decimation warps 44.1 kHz → 16 kHz and Deepgram hears garbage. */
+function resample(buf: ArrayBuffer, fromRate: number, toRate: number): ArrayBuffer {
+  if (fromRate === toRate) return buf;
   const input = new Int16Array(buf);
-  const out = new Int16Array(Math.floor(input.length / ratio));
-  for (let i = 0; i < out.length; i++) out[i] = input[i * ratio];
+  const outLen = Math.max(1, Math.floor((input.length * toRate) / fromRate));
+  const out = new Int16Array(outLen);
+  const step = fromRate / toRate;
+  for (let i = 0; i < outLen; i++) {
+    const src = i * step;
+    const j = Math.floor(src);
+    const frac = src - j;
+    const a = input[j] ?? 0;
+    const b = input[Math.min(j + 1, input.length - 1)] ?? 0;
+    out[i] = (a + (b - a) * frac) | 0;
+  }
   return out.buffer;
 }
 

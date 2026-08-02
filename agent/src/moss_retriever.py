@@ -81,7 +81,12 @@ class MossService:
         ]
 
     async def ensure_index(self, *, force_reseed: bool = False) -> dict[str, Any]:
-        """Create-or-upsert long-term index, then load locally for <10ms queries."""
+        """Create-or-upsert long-term index, then load locally for <10ms queries.
+
+        Quota / index-limit failures degrade to local fixtures. Raising here used to take
+        down every voice turn that touched moss_search — the patient heard silence while
+        the agent looped on a 429.
+        """
         if not self._client:
             return {"mode": "mock", "docs": len(self._docs)}
 
@@ -103,15 +108,31 @@ class MossService:
             info["doc_count"] = getattr(result, "doc_count", None)
         except Exception as exc:
             logger.info("Moss get_index/add_docs → create_index (%s)", exc)
-            created = await self._client.create_index(
-                name, docs, DEFAULT_MODEL, wait=True
-            )
-            info["created_job"] = getattr(created, "job_id", None)
-            info["doc_count"] = getattr(created, "doc_count", len(docs))
+            try:
+                created = await self._client.create_index(
+                    name, docs, DEFAULT_MODEL, wait=True
+                )
+                info["created_job"] = getattr(created, "job_id", None)
+                info["doc_count"] = getattr(created, "doc_count", len(docs))
+            except Exception as create_exc:
+                # USAGE_LIMIT_EXCEEDED / Index limit of 3 — keep the call alive on fixtures.
+                logger.warning(
+                    "Moss unavailable (%s); falling back to local fixtures", create_exc
+                )
+                self._client = None
+                info["mode"] = "fixture-fallback"
+                info["error"] = str(create_exc)
+                return info
 
-        await self._client.load_index(name)
-        self._long_term_loaded = True
-        info["loaded"] = True
+        try:
+            await self._client.load_index(name)
+            self._long_term_loaded = True
+            info["loaded"] = True
+        except Exception as load_exc:
+            logger.warning("Moss load_index failed (%s); using fixtures", load_exc)
+            self._client = None
+            info["mode"] = "fixture-fallback"
+            info["error"] = str(load_exc)
         return info
 
     async def get_session(self, session_id: str):
@@ -194,6 +215,34 @@ class MossService:
         if self._client:
             if not self._long_term_loaded:
                 await self.ensure_index()
+            # ensure_index may have disabled the client on quota; fall through to fixtures.
+            if not self._client:
+                pass
+            else:
+                return await self._search_live(
+                    query,
+                    top_k,
+                    session_id=session_id,
+                    metadata_type=metadata_type,
+                    alpha=alpha,
+                    min_score=min_score,
+                )
+
+        # Mock / fixture fallback: keyword rank over fixtures
+        return self._search_fixtures(query, top_k, metadata_type=metadata_type)
+
+    async def _search_live(
+        self,
+        query: str,
+        top_k: int,
+        *,
+        session_id: str | None,
+        metadata_type: str | None,
+        alpha: float,
+        min_score: float,
+    ) -> list[Document]:
+        assert self._client is not None
+        try:
             from moss import QueryOptions
 
             opts_kwargs: dict[str, Any] = {"top_k": top_k, "alpha": alpha}
@@ -257,11 +306,20 @@ class MossService:
                             )
                         )
 
-            # Prefer higher scores; keep session + long-term mixed
             docs.sort(key=lambda x: float(x.metadata.get("score") or 0), reverse=True)
             return docs[: top_k + 2]
+        except Exception as exc:  # noqa: BLE001 - never take the voice turn down for Moss
+            logger.warning("Moss query failed (%s); using fixtures", exc)
+            self._client = None
+            return self._search_fixtures(query, top_k, metadata_type=metadata_type)
 
-        # Mock: keyword rank over fixtures (+ optional in-memory session texts)
+    def _search_fixtures(
+        self,
+        query: str,
+        top_k: int,
+        *,
+        metadata_type: str | None = None,
+    ) -> list[Document]:
         q = query.lower()
         scored: list[tuple[float, dict[str, Any]]] = []
         for d in self._docs:
